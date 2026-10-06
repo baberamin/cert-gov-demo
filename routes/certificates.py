@@ -22,3 +22,8 @@ def list_certificates():
 @certificates_bp.route('/api/certificates/<serial>')
 def get_certificate(serial):
     return jsonify(dc.get(f'/mpki/api/v1/certificate/{serial}'))
+
+
+@certificates_bp.route('/api/certificates', methods=['POST'])
+def enroll_certificate():
+    return jsonify(dc.post('/mpki/api/v1/certificate', request.get_json())), 201

@@ -70,3 +70,25 @@ def test_digicert_error_is_proxied(client):
     resp = client.get('/api/certificates')
     assert resp.status_code == 401
     assert resp.get_json()['message'] == 'Unauthorized'
+
+
+@rsps.activate
+def test_enroll_certificate(client):
+    new_cert = {**MOCK_CERT, 'serial_number': 'NEW-SERIAL-002'}
+    rsps.add(rsps.POST, f'{DIGICERT_BASE}/mpki/api/v1/certificate', json=new_cert, status=201)
+
+    enroll_body = {
+        'profile': {'id': PROFILE_ID},
+        'certificate': {
+            'common_name': 'test.example.com',
+            'sans': {'dns_names': ['test.example.com']},
+        }
+    }
+    resp = client.post('/api/certificates', json=enroll_body)
+    assert resp.status_code == 201
+    assert resp.get_json()['serial_number'] == 'NEW-SERIAL-002'
+
+    sent = rsps.calls[0].request
+    body = json.loads(sent.body)
+    assert body['certificate']['common_name'] == 'test.example.com'
+    assert sent.headers['x-api-key'] == 'test-api-key'
