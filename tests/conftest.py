@@ -8,7 +8,7 @@ def set_env(monkeypatch):
     monkeypatch.setenv('DIGICERT_BASE_URL', 'https://demo.one.digicert.com')
 
 @pytest.fixture
-def app():
+def app(set_env):
     application = create_app()
     application.config['TESTING'] = True
     return application

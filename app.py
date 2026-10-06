@@ -1,11 +1,9 @@
 from flask import Flask, send_from_directory, jsonify
 from dotenv import load_dotenv
 import requests
-import os
-
-load_dotenv()
 
 def create_app():
+    load_dotenv()
     app = Flask(__name__, static_folder='static')
 
     from routes.certificates import certificates_bp
