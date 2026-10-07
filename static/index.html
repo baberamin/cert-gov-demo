@@ -1,2 +1,48 @@
 <!DOCTYPE html>
-<html><head><title>Zuma POC</title></head><body>Loading...</body></html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saviynt Zuma — NHI Management</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <div id="app">
+    <nav id="sidebar">
+      <div class="logo">ZUMA</div>
+      <a href="#" class="nav-item active" data-view="ownership">Ownership</a>
+      <a href="#" class="nav-item" data-view="remediation">Remediation</a>
+    </nav>
+    <main id="content">
+      <div id="error-banner" class="error-banner hidden"></div>
+      <div id="view-container"></div>
+    </main>
+  </div>
+
+  <div id="modal-overlay" class="hidden">
+    <div id="modal"></div>
+  </div>
+
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/ownership.js"></script>
+  <script src="/static/js/remediation.js"></script>
+  <script>
+    const views = {
+      ownership: () => renderOwnershipView(),
+      remediation: () => renderRemediationView(),
+    };
+
+    document.querySelectorAll('.nav-item[data-view]').forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        document.querySelectorAll('.nav-item').forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+        const view = link.dataset.view;
+        if (views[view]) views[view]();
+      });
+    });
+
+    renderOwnershipView();
+  </script>
+</body>
+</html>
