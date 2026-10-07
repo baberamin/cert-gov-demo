@@ -16,7 +16,7 @@ def get_profile(profile_id):
 
 @certificates_bp.route('/api/certificates')
 def list_certificates():
-    return jsonify(dc.get('/mpki/api/v1/certificate'))
+    return jsonify(dc.get('/mpki/api/v1/certificate-search', params=request.args))
 
 
 @certificates_bp.route('/api/certificates/<serial>')

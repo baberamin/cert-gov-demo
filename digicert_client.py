@@ -23,6 +23,11 @@ def post(path, body=None):
         return {}
     return resp.json()
 
+def put(path, body=None):
+    resp = requests.put(f"{_base_url()}{path}", headers=_headers(), json=body)
+    resp.raise_for_status()
+    return resp.json() if resp.content else {}
+
 def delete(path):
     resp = requests.delete(f"{_base_url()}{path}", headers=_headers())
     resp.raise_for_status()

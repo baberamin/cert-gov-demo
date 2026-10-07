@@ -48,11 +48,11 @@ def test_get_profile(client):
 
 @rsps.activate
 def test_list_certificates(client):
-    rsps.add(rsps.GET, f'{DIGICERT_BASE}/mpki/api/v1/certificate', json=[MOCK_CERT], status=200)
+    rsps.add(rsps.GET, f'{DIGICERT_BASE}/mpki/api/v1/certificate-search', json={'items': [MOCK_CERT], 'total': 1}, status=200)
     resp = client.get('/api/certificates')
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data[0]['serial_number'] == 'CERT-SERIAL-001'
+    assert data['items'][0]['serial_number'] == 'CERT-SERIAL-001'
     assert rsps.calls[0].request.headers['x-api-key'] == 'test-api-key'
 
 
@@ -66,7 +66,7 @@ def test_get_certificate(client):
 
 @rsps.activate
 def test_digicert_error_is_proxied(client):
-    rsps.add(rsps.GET, f'{DIGICERT_BASE}/mpki/api/v1/certificate', json={'message': 'Unauthorized'}, status=401)
+    rsps.add(rsps.GET, f'{DIGICERT_BASE}/mpki/api/v1/certificate-search', json={'message': 'Unauthorized'}, status=401)
     resp = client.get('/api/certificates')
     assert resp.status_code == 401
     assert resp.get_json()['message'] == 'Unauthorized'

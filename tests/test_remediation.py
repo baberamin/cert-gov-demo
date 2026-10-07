@@ -24,12 +24,12 @@ MOCK_NEW_CERT = {
 
 @rsps.activate
 def test_revoke_certificate(client):
-    rsps.add(rsps.POST, f'{DIGICERT_BASE}/mpki/api/v1/certificate/{SERIAL}/revocation', status=204)
+    rsps.add(rsps.PUT, f'{DIGICERT_BASE}/mpki/api/v1/certificate/{SERIAL}/revoke', status=204)
     resp = client.post(f'/api/certificates/{SERIAL}/revoke', json={'reason': 'key_compromise'})
     assert resp.status_code == 200
     sent = rsps.calls[0].request
     body = json.loads(sent.body)
-    assert body['reason'] == 'key_compromise'
+    assert body['revocation_reason'] == 'key_compromise'
     assert sent.headers['x-api-key'] == 'test-api-key'
 
 
@@ -39,8 +39,8 @@ def test_reissue_certificate_success(client):
     rsps.add(rsps.GET, f'{DIGICERT_BASE}/mpki/api/v1/certificate/{SERIAL}', json=MOCK_OLD_CERT, status=200)
     # POST new cert enrollment
     rsps.add(rsps.POST, f'{DIGICERT_BASE}/mpki/api/v1/certificate', json=MOCK_NEW_CERT, status=201)
-    # POST revoke old cert
-    rsps.add(rsps.POST, f'{DIGICERT_BASE}/mpki/api/v1/certificate/{SERIAL}/revocation', status=204)
+    # PUT revoke old cert
+    rsps.add(rsps.PUT, f'{DIGICERT_BASE}/mpki/api/v1/certificate/{SERIAL}/revoke', status=204)
 
     resp = client.post(f'/api/certificates/{SERIAL}/reissue')
     assert resp.status_code == 201
@@ -50,9 +50,9 @@ def test_reissue_certificate_success(client):
     # Verify correct call order
     assert rsps.calls[0].request.method == 'GET'
     assert rsps.calls[1].request.method == 'POST'
-    assert 'revocation' not in rsps.calls[1].request.url
-    assert rsps.calls[2].request.method == 'POST'
-    assert 'revocation' in rsps.calls[2].request.url
+    assert 'revoke' not in rsps.calls[1].request.url
+    assert rsps.calls[2].request.method == 'PUT'
+    assert 'revoke' in rsps.calls[2].request.url
 
     # Verify new cert enrolled with same CN and SANs as old
     enroll_body = json.loads(rsps.calls[1].request.body)
@@ -64,7 +64,7 @@ def test_reissue_certificate_success(client):
 def test_reissue_revocation_failure_returns_207(client):
     rsps.add(rsps.GET, f'{DIGICERT_BASE}/mpki/api/v1/certificate/{SERIAL}', json=MOCK_OLD_CERT, status=200)
     rsps.add(rsps.POST, f'{DIGICERT_BASE}/mpki/api/v1/certificate', json=MOCK_NEW_CERT, status=201)
-    rsps.add(rsps.POST, f'{DIGICERT_BASE}/mpki/api/v1/certificate/{SERIAL}/revocation',
+    rsps.add(rsps.PUT, f'{DIGICERT_BASE}/mpki/api/v1/certificate/{SERIAL}/revoke',
              json={'message': 'Already revoked'}, status=409)
 
     resp = client.post(f'/api/certificates/{SERIAL}/reissue')
@@ -76,7 +76,7 @@ def test_reissue_revocation_failure_returns_207(client):
 
 @rsps.activate
 def test_cancel_certificate(client):
-    rsps.add(rsps.DELETE, f'{DIGICERT_BASE}/mpki/api/v1/certificate/{SERIAL}', status=204)
+    rsps.add(rsps.DELETE, f'{DIGICERT_BASE}/mpki/api/v1/certificate/{SERIAL}/revoke', status=204)
     resp = client.post(f'/api/certificates/{SERIAL}/cancel')
     assert resp.status_code == 200
     assert rsps.calls[0].request.method == 'DELETE'

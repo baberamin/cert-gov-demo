@@ -7,7 +7,8 @@ remediation_bp = Blueprint('remediation', __name__)
 
 @remediation_bp.route('/api/certificates/<serial>/revoke', methods=['POST'])
 def revoke_certificate(serial):
-    dc.post(f'/mpki/api/v1/certificate/{serial}/revocation', request.get_json())
+    body = request.get_json() or {}
+    dc.put(f'/mpki/api/v1/certificate/{serial}/revoke', {'revocation_reason': body.get('reason', 'unspecified')})
     return jsonify({'status': 'revoked', 'serial_number': serial})
 
 
@@ -25,7 +26,7 @@ def reissue_certificate(serial):
     new_cert = dc.post('/mpki/api/v1/certificate', enroll_body)
 
     try:
-        dc.post(f'/mpki/api/v1/certificate/{serial}/revocation', {'reason': 'superseded'})
+        dc.put(f'/mpki/api/v1/certificate/{serial}/revoke', {'revocation_reason': 'superseded'})
     except http_requests.HTTPError:
         return jsonify({
             'error': 'New certificate issued but revocation of old cert failed',
@@ -37,7 +38,5 @@ def reissue_certificate(serial):
 
 @remediation_bp.route('/api/certificates/<serial>/cancel', methods=['POST'])
 def cancel_certificate(serial):
-    # DigiCert MPKI cancel for pending certs uses DELETE on the certificate resource.
-    # If this returns an error, verify the correct endpoint in the API docs and adjust.
-    dc.delete(f'/mpki/api/v1/certificate/{serial}')
+    dc.delete(f'/mpki/api/v1/certificate/{serial}/revoke')
     return jsonify({'status': 'cancelled', 'serial_number': serial})

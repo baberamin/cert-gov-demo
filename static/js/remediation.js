@@ -17,12 +17,13 @@ async function renderRemediationView() {
     <div id="remediation-wrap"><div class="loading">Loading certificates...</div></div>
   `;
 
-  let certs;
+  let certsResp;
   try {
-    certs = await api.getCertificates();
+    certsResp = await api.getCertificates();
   } catch {
     return;
   }
+  const certs = certsResp.items || [];
 
   renderRemediationTable(certs);
 }
@@ -46,7 +47,7 @@ function remRow(cert) {
   const isRevoked = s === 'revoked' || s === 'expired';
   const isPending = s === 'pending';
   const isActive  = s === 'issued';
-  const d = daysUntilRem(cert.valid_till);
+  const d = daysUntilRem(cert.valid_to);
   const expiryClass = d !== null && d < 7 ? 'expiry-warn' : '';
 
   const actions = isRevoked
@@ -63,7 +64,7 @@ function remRow(cert) {
       <td class="cert-name">${cert.common_name}</td>
       <td>${cert.profile?.name || '—'}</td>
       <td><span class="status status-${s}">${formatStatusRem(s)}</span></td>
-      <td class="${expiryClass}">${formatExpiryRem(cert.valid_till)}</td>
+      <td class="${expiryClass}">${formatExpiryRem(cert.valid_to)}</td>
       <td class="actions-cell">${actions}</td>
     </tr>
   `;

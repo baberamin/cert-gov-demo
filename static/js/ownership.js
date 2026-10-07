@@ -14,12 +14,13 @@ async function renderOwnershipView() {
     <div id="cert-detail" class="detail-panel hidden"></div>
   `;
 
-  let certs, businessUnits;
+  let certsResp, businessUnits;
   try {
-    [certs, businessUnits] = await Promise.all([api.getCertificates(), api.getBusinessUnits()]);
+    [certsResp, businessUnits] = await Promise.all([api.getCertificates(), api.getBusinessUnits()]);
   } catch {
     return;
   }
+  const certs = certsResp.items || [];
 
   const buFilter = document.getElementById('bu-filter');
   businessUnits.forEach(bu => {
@@ -60,7 +61,7 @@ function renderOwnershipTable(certs, buId) {
             <td>${c.seat?.user_name || c.seat?.seat_id || '<span class="unassigned">—</span>'}</td>
             <td>${renderTags(c.tags || [])}</td>
             <td><span class="status status-${c.status}">${formatStatus(c.status)}</span></td>
-            <td class="${daysUntil(c.valid_till) < 7 ? 'expiry-warn' : ''}">${formatExpiry(c.valid_till)}</td>
+            <td class="${daysUntil(c.valid_to) < 7 ? 'expiry-warn' : ''}">${formatExpiry(c.valid_to)}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -115,7 +116,7 @@ function showOwnershipDetail(serial, certs) {
       <div><div class="detail-key">Business Unit</div><div class="detail-val">${cert.business_unit?.name || '—'}</div></div>
       <div><div class="detail-key">Owner</div><div class="detail-val">${cert.seat?.user_name || cert.seat?.seat_id || '—'}</div></div>
       <div><div class="detail-key">Profile</div><div class="detail-val">${cert.profile?.name || '—'}</div></div>
-      <div><div class="detail-key">Valid Until</div><div class="detail-val">${cert.valid_till ? new Date(cert.valid_till).toLocaleDateString() : '—'}</div></div>
+      <div><div class="detail-key">Valid Until</div><div class="detail-val">${cert.valid_to ? new Date(cert.valid_to).toLocaleDateString() : '—'}</div></div>
     </div>
   `;
 }
