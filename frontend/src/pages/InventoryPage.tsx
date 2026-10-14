@@ -513,13 +513,13 @@ function ActionPanel({ cert, mode, onClose, onSuccess }: {
   onClose: () => void;
   onSuccess: (serial: string, update: Partial<Cert>) => void;
 }) {
-  const [reason, setReason] = useState('UNSPECIFIED');
+  const [reason, setReason] = useState(mode === 'reissue' ? 'SUPERSEDED' : 'UNSPECIFIED');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const bannerConfig = {
     revoke:  { bg: 'bg-red-50 border-red-200 text-red-700', text: 'Revoking is immediate and irreversible.' },
-    reissue: { bg: 'bg-blue-50 border-blue-200 text-blue-700', text: 'A fresh key pair will be generated. The old certificate will be revoked as superseded.' },
+    reissue: { bg: 'bg-blue-50 border-blue-200 text-blue-700', text: 'A fresh key pair will be generated. Select the reason the old certificate is being revoked.' },
     cancel:  { bg: 'bg-amber-50 border-amber-200 text-amber-700', text: 'This will halt the pending issuance request.' },
   }[mode];
 
@@ -533,7 +533,7 @@ function ActionPanel({ cert, mode, onClose, onSuccess }: {
         await revoke(cert.serial_number, reason);
         onSuccess(cert.serial_number, { status: 'revoked' });
       } else if (mode === 'reissue') {
-        await reissue(cert.serial_number);
+        await reissue(cert.serial_number, reason);
         onSuccess(cert.serial_number, { status: 'revoked' });
       } else {
         await cancel(cert.serial_number);
@@ -597,7 +597,7 @@ function ActionPanel({ cert, mode, onClose, onSuccess }: {
         <p className="text-sm font-medium text-gray-900">{cert.common_name ?? cert.seat?.seat_id ?? '—'}</p>
       </div>
 
-      {mode === 'revoke' && (
+      {(mode === 'revoke' || mode === 'reissue') && (
         <div>
           <label className="block text-xs text-gray-500 mb-1">
             Revocation Reason <span className="text-red-500">*</span>

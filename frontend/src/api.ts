@@ -68,8 +68,12 @@ export async function revoke(serial: string, reason: string): Promise<void> {
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function reissue(serial: string): Promise<void> {
-  const res = await fetch(`/api/certificates/${serial}/reissue`, { method: 'POST' });
+export async function reissue(serial: string, reason: string): Promise<void> {
+  const res = await fetch(`/api/certificates/${serial}/reissue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
   if (!res.ok) throw new Error(await res.text());
 }
 

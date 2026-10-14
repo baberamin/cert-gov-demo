@@ -56,8 +56,13 @@ def reissue_certificate(serial):
         'attributes': {'subject.common_name': common_name},
     })
 
+    body = request.get_json() or {}
+    reason = (body.get('reason') or 'SUPERSEDED').strip().upper()
+    if reason not in VALID_REVOCATION_REASONS:
+        reason = 'SUPERSEDED'
+
     try:
-        dc.put(f'/mpki/api/v1/certificate/{serial}/revoke', {'revocation_reason': 'SUPERSEDED'})
+        dc.put(f'/mpki/api/v1/certificate/{serial}/revoke', {'revocation_reason': reason})
     except Exception:
         return jsonify({
             'error': 'New certificate issued but revocation of old cert failed',
