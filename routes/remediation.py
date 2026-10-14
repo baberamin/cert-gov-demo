@@ -36,22 +36,31 @@ def revoke_certificate(serial):
     return jsonify({'status': 'revoked', 'serial_number': serial})
 
 
+PROFILE_ID = '85d4bc85-d567-4a3e-a832-dc1b770e1e52'  # Private Server Certificate 199 Days
+
+
 @remediation_bp.route('/api/certificates/<serial>/reissue', methods=['POST'])
 def reissue_certificate(serial):
     old_cert = dc.get(f'/mpki/api/v1/certificate/{serial}')
     seat_id = (old_cert.get('seat') or {}).get('seat_id') or old_cert.get('common_name') or 'unknown'
+    common_name = (old_cert.get('subject') or {}).get('common_name') or seat_id
 
-    csr_pem = _generate_csr(seat_id)
-    new_cert = dc.post(f'/mpki/api/v1/certificate/{serial}/renew', {
+    csr_pem = _generate_csr(common_name)
+
+    # Issue a fresh certificate — avoids the renewal-window restriction on /renew,
+    # which blocks rotation until 30 days before expiry.
+    new_cert = dc.post('/mpki/api/v1/certificate', {
+        'profile': {'id': PROFILE_ID},
         'csr': csr_pem,
-        'delivery_format': 'x509',
+        'seat': {'seat_id': seat_id},
+        'attributes': {'subject.common_name': common_name},
     })
 
     try:
         dc.put(f'/mpki/api/v1/certificate/{serial}/revoke', {'revocation_reason': 'SUPERSEDED'})
     except Exception:
         return jsonify({
-            'error': 'Renewal succeeded but revocation of old cert failed',
+            'error': 'New certificate issued but revocation of old cert failed',
             'new_serial': new_cert.get('serial_number'),
         }), 207
 
