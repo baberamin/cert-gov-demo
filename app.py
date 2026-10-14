@@ -1,4 +1,5 @@
-from flask import Flask, send_from_directory, jsonify
+from flask import Flask, jsonify
+from werkzeug.exceptions import NotFound
 from dotenv import load_dotenv
 import requests
 
@@ -9,14 +10,25 @@ def create_app():
     from routes.certificates import certificates_bp
     from routes.ownership import ownership_bp
     from routes.remediation import remediation_bp
+    from routes.owner_store import owner_store_bp, init_db
+    from routes.users import users_bp
 
     app.register_blueprint(certificates_bp)
     app.register_blueprint(ownership_bp)
     app.register_blueprint(remediation_bp)
+    app.register_blueprint(owner_store_bp)
+    app.register_blueprint(users_bp)
+    init_db()
 
-    @app.route('/')
-    def index():
-        return send_from_directory('static', 'index.html')
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def catch_all(path):
+        if path.startswith('api/'):
+            return {'error': 'not found'}, 404
+        try:
+            return app.send_static_file(path) if path else app.send_static_file('index.html')
+        except NotFound:
+            return app.send_static_file('index.html')
 
     @app.errorhandler(requests.HTTPError)
     def handle_digicert_error(e):
