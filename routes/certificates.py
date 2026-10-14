@@ -8,7 +8,7 @@ from routes.ownership import ensure_seat_exists
 
 certificates_bp = Blueprint('certificates', __name__)
 
-PROFILE_ID = '23d9643d-5be3-4e0c-9814-b6504ec6c251'  # GenPrivateCA (rest_api, third_party_app)
+PROFILE_ID = '85d4bc85-d567-4a3e-a832-dc1b770e1e52'  # Private Server Certificate 199 Days (rest_api, third_party_app)
 
 
 def _generate_csr(common_name: str, dns_names: list[str]) -> tuple[str, str]:

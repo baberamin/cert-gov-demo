@@ -693,7 +693,7 @@ function IssueCertPanel({ bus, users, onClose, onIssued }: {
   const today = new Date();
   const validFromStr = today.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   const validToDate = new Date(today);
-  validToDate.setDate(today.getDate() + 5);
+  validToDate.setDate(today.getDate() + 199);
   const validToStr = validToDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
   const filteredOwners = users.filter(u =>
@@ -822,9 +822,9 @@ function IssueCertPanel({ bus, users, onClose, onIssued }: {
   return (
     <SidePanel title="Issue Certificate" onClose={onClose} footer={issueFooter}>
       <div className="text-xs text-gray-500 mb-5 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 space-y-1">
-        <p><span className="font-medium text-gray-700">Profile:</span> baber private cert</p>
+        <p><span className="font-medium text-gray-700">Profile:</span> Private Server Certificate 199 Days</p>
         <p><span className="font-medium text-gray-700">Issuing CA:</span> Saviynt Test ICA → Saviynt Test Root CA</p>
-        <p><span className="font-medium text-gray-700">Key:</span> RSA 2048 · SHA-256 · 5-day validity</p>
+        <p><span className="font-medium text-gray-700">Key:</span> RSA 2048 · SHA-256 · 199-day validity</p>
       </div>
 
       <div className="space-y-4">
@@ -930,7 +930,7 @@ function IssueCertPanel({ bus, users, onClose, onIssued }: {
             <p className="text-sm text-gray-700 border border-gray-200 rounded-lg px-3 py-2 bg-gray-50">{validToStr}</p>
           </div>
         </div>
-        <p className="text-xs text-gray-400 -mt-2">Validity is fixed at 5 days by the certificate profile.</p>
+        <p className="text-xs text-gray-400 -mt-2">Validity is fixed at 199 days by the certificate profile.</p>
       </div>
 
       {error && (
