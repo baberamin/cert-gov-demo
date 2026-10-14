@@ -494,32 +494,43 @@ function DetailPanel({ cert, localBus, localOwner, users, onClose, onRevoke, onR
   );
 }
 
+const REVOCATION_REASONS: { value: string; label: string }[] = [
+  { value: 'UNSPECIFIED',            label: 'Unspecified' },
+  { value: 'KEY_COMPROMISE',         label: 'Key Compromise' },
+  { value: 'CA_COMPROMISE',          label: 'CA Compromise' },
+  { value: 'AFFILIATION_CHANGED',    label: 'Affiliation Changed' },
+  { value: 'SUPERSEDED',             label: 'Superseded' },
+  { value: 'CESSATION_OF_OPERATION', label: 'Cessation of Operation' },
+  { value: 'CERTIFICATE_HOLD',       label: 'Certificate Hold' },
+  { value: 'REMOVE_FROM_CRL',        label: 'Remove from CRL' },
+  { value: 'PRIVILEGE_WITHDRAWN',    label: 'Privilege Withdrawn' },
+  { value: 'AA_COMPROMISE',          label: 'AA Compromise' },
+];
+
 function ActionPanel({ cert, mode, onClose, onSuccess }: {
   cert: Cert;
   mode: 'revoke' | 'reissue' | 'cancel';
   onClose: () => void;
   onSuccess: (serial: string, update: Partial<Cert>) => void;
 }) {
-  const [reason, setReason] = useState('');
+  const [reason, setReason] = useState('UNSPECIFIED');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const bannerConfig = {
     revoke:  { bg: 'bg-red-50 border-red-200 text-red-700', text: 'Revoking is immediate and irreversible.' },
-    reissue: { bg: 'bg-blue-50 border-blue-200 text-blue-700', text: 'A fresh key pair will be generated.' },
+    reissue: { bg: 'bg-blue-50 border-blue-200 text-blue-700', text: 'A fresh key pair will be generated. The old certificate will be revoked as superseded.' },
     cancel:  { bg: 'bg-amber-50 border-amber-200 text-amber-700', text: 'This will halt the pending issuance request.' },
   }[mode];
 
   const titles = { revoke: 'Revoke Certificate', reissue: 'Revoke & Reissue', cancel: 'Cancel Order' };
-  const reasonRequired = mode !== 'cancel';
 
   async function handleSubmit() {
-    if (reasonRequired && !reason.trim()) return;
     setLoading(true);
     setError('');
     try {
       if (mode === 'revoke') {
-        await revoke(cert.serial_number, reason || 'unspecified');
+        await revoke(cert.serial_number, reason);
         onSuccess(cert.serial_number, { status: 'revoked' });
       } else if (mode === 'reissue') {
         await reissue(cert.serial_number);
@@ -540,7 +551,7 @@ function ActionPanel({ cert, mode, onClose, onSuccess }: {
     revoke: (
       <button
         onClick={handleSubmit}
-        disabled={loading || (reasonRequired && !reason.trim())}
+        disabled={loading}
         className="flex-1 px-4 py-2 text-sm border border-red-300 text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-40 transition-colors"
       >
         {loading ? 'Working…' : 'Revoke Certificate'}
@@ -549,7 +560,7 @@ function ActionPanel({ cert, mode, onClose, onSuccess }: {
     reissue: (
       <button
         onClick={handleSubmit}
-        disabled={loading || (reasonRequired && !reason.trim())}
+        disabled={loading}
         className="flex-1 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
       >
         {loading ? 'Working…' : 'Revoke & Reissue'}
@@ -586,19 +597,22 @@ function ActionPanel({ cert, mode, onClose, onSuccess }: {
         <p className="text-sm font-medium text-gray-900">{cert.common_name ?? cert.seat?.seat_id ?? '—'}</p>
       </div>
 
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">
-          {mode === 'cancel' ? 'Reason (optional)' : 'Reason'}
-          {reasonRequired && <span className="text-red-500 ml-0.5">*</span>}
-        </label>
-        <textarea
-          value={reason}
-          onChange={e => setReason(e.target.value)}
-          rows={3}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-          placeholder={mode === 'cancel' ? 'Optional reason…' : 'Required reason…'}
-        />
-      </div>
+      {mode === 'revoke' && (
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">
+            Revocation Reason <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {REVOCATION_REASONS.map(r => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {error && (
         <div className="mt-4 border border-red-200 bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg">

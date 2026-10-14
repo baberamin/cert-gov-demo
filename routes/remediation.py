@@ -19,10 +19,20 @@ def _generate_csr(common_name: str) -> str:
     return csr.public_bytes(serialization.Encoding.PEM).decode()
 
 
+VALID_REVOCATION_REASONS = {
+    'UNSPECIFIED', 'KEY_COMPROMISE', 'CA_COMPROMISE', 'AFFILIATION_CHANGED',
+    'SUPERSEDED', 'CESSATION_OF_OPERATION', 'CERTIFICATE_HOLD',
+    'REMOVE_FROM_CRL', 'PRIVILEGE_WITHDRAWN', 'AA_COMPROMISE',
+}
+
+
 @remediation_bp.route('/api/certificates/<serial>/revoke', methods=['POST'])
 def revoke_certificate(serial):
     body = request.get_json() or {}
-    dc.put(f'/mpki/api/v1/certificate/{serial}/revoke', {'revocation_reason': body.get('reason', 'unspecified')})
+    reason = (body.get('reason') or 'UNSPECIFIED').strip().upper()
+    if reason not in VALID_REVOCATION_REASONS:
+        reason = 'UNSPECIFIED'
+    dc.put(f'/mpki/api/v1/certificate/{serial}/revoke', {'revocation_reason': reason})
     return jsonify({'status': 'revoked', 'serial_number': serial})
 
 
@@ -38,7 +48,7 @@ def reissue_certificate(serial):
     })
 
     try:
-        dc.put(f'/mpki/api/v1/certificate/{serial}/revoke', {'revocation_reason': 'superseded'})
+        dc.put(f'/mpki/api/v1/certificate/{serial}/revoke', {'revocation_reason': 'SUPERSEDED'})
     except Exception:
         return jsonify({
             'error': 'Renewal succeeded but revocation of old cert failed',
