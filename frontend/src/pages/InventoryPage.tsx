@@ -1161,6 +1161,15 @@ export function InventoryPage() {
     });
   }
 
+  async function refreshCerts() {
+    try {
+      const fresh = await fetchCertificates();
+      setCerts(fresh);
+    } catch {
+      // silent — don't break UX on refresh failure
+    }
+  }
+
   function handleSearchChange(val: string) {
     setSearch(val);
     setPage(1);
@@ -1229,6 +1238,7 @@ export function InventoryPage() {
 
   function handleSuccess(serial: string, update: Partial<Cert>) {
     setCerts(prev => prev.map(c => c.serial_number === serial ? { ...c, ...update } : c));
+    refreshCerts();
   }
 
   function handleAssignSuccess(serial: string, ownerName: string) {
