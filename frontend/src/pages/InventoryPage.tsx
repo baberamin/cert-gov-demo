@@ -155,13 +155,55 @@ function ActionsDropdown({ cert, hasOwner, onDetail, onRevoke, onReissue, onCanc
   );
 }
 
-function DetailPanel({ cert, localBus, onClose, onRevoke, onReissue }: {
+function DetailPanel({ cert, localBus, localOwner, users, onClose, onRevoke, onReissue, onOwnerSaved }: {
   cert: Cert;
   localBus: Record<string, { id: string; name: string }>;
+  localOwner: string;
+  users: User[];
   onClose: () => void;
   onRevoke: () => void;
   onReissue: () => void;
+  onOwnerSaved: (serial: string, ownerName: string) => void;
 }) {
+  const [editingOwner, setEditingOwner] = useState(false);
+  const [ownerQuery, setOwnerQuery] = useState('');
+  const [ownerSelected, setOwnerSelected] = useState<User | null>(null);
+  const [ownerDropOpen, setOwnerDropOpen] = useState(false);
+  const [savingOwner, setSavingOwner] = useState(false);
+  const [ownerError, setOwnerError] = useState('');
+  const ownerDropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ownerDropRef.current && !ownerDropRef.current.contains(e.target as Node)) setOwnerDropOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const recommendation = getRecommendation(cert, users, localBus);
+  const showOwnerPicker = !localOwner || editingOwner;
+
+  const filteredOwners = users.filter(u =>
+    !ownerQuery || u.name.toLowerCase().includes(ownerQuery.toLowerCase()) || u.email.toLowerCase().includes(ownerQuery.toLowerCase())
+  );
+
+  async function saveOwner(user: User) {
+    setSavingOwner(true);
+    setOwnerError('');
+    try {
+      await assignOwner(cert.serial_number, user.name, user.email, cert.seat?.seat_id);
+      onOwnerSaved(cert.serial_number, user.name);
+      setEditingOwner(false);
+      setOwnerSelected(null);
+      setOwnerQuery('');
+    } catch (e) {
+      setOwnerError(e instanceof Error ? e.message : 'Failed to save owner');
+    } finally {
+      setSavingOwner(false);
+    }
+  }
+
   const sans = cert.san?.dns_names ?? [];
   const isActive = cert.status === 'issued' || cert.status === 'active';
 
@@ -298,14 +340,24 @@ function DetailPanel({ cert, localBus, onClose, onRevoke, onReissue }: {
 
       <section className="mb-5">
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Ownership</h3>
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 mb-3">
           <div>
             <p className="text-xs text-gray-400">Business Unit</p>
             <p className="text-sm text-gray-700">{(localBus[cert.serial_number] ?? cert.business_unit)?.name ?? '—'}</p>
           </div>
-          <div>
-            <p className="text-xs text-gray-400">Owner</p>
-            <p className="text-sm text-gray-700">{cert.seat?.seat_name ?? '—'}</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-400">Owner</p>
+              <p className="text-sm text-gray-700">{localOwner || '—'}</p>
+            </div>
+            {localOwner && !editingOwner && (
+              <button
+                onClick={() => setEditingOwner(true)}
+                className="text-xs text-indigo-600 hover:text-indigo-800"
+              >
+                Change
+              </button>
+            )}
           </div>
           {cert.ca_vendor && (
             <div>
@@ -320,6 +372,97 @@ function DetailPanel({ cert, localBus, onClose, onRevoke, onReissue }: {
             </div>
           )}
         </div>
+
+        {/* Inline owner assignment / change */}
+        {showOwnerPicker && (
+          <div className="border-t border-gray-100 pt-3 space-y-3">
+            {/* Recommendation */}
+            {recommendation && !editingOwner && (
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Recommended Owner</p>
+                <div className="border border-gray-200 rounded-lg px-3 py-2.5 bg-white">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <p className="text-sm font-medium text-gray-900">{recommendation.user.name}</p>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${scoreChipClass(recommendation.score)}`}>
+                      {recommendation.score}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-2">{recommendation.user.email} · {recommendation.user.department}</p>
+                  <button
+                    onClick={() => saveOwner(recommendation.user)}
+                    disabled={savingOwner}
+                    className="w-full px-3 py-1.5 text-sm border border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50 disabled:opacity-40 transition-colors"
+                  >
+                    {savingOwner ? 'Saving…' : 'Accept Recommendation'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Picker */}
+            <div>
+              {recommendation && !editingOwner && (
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="text-xs text-gray-400">or choose manually</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+              )}
+              {editingOwner && (
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Change Owner</p>
+              )}
+              <div ref={ownerDropRef} className="relative">
+                <input
+                  type="text"
+                  value={ownerSelected && !ownerDropOpen ? ownerSelected.name : ownerQuery}
+                  onChange={e => { setOwnerQuery(e.target.value); setOwnerSelected(null); setOwnerDropOpen(true); }}
+                  onFocus={() => setOwnerDropOpen(true)}
+                  placeholder="Search by name or email…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                {ownerDropOpen && (
+                  <div className="absolute left-0 right-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-44 overflow-y-auto">
+                    {filteredOwners.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-gray-400">No users found.</p>
+                    ) : filteredOwners.map(u => (
+                      <button
+                        key={u.id}
+                        className="w-full text-left px-4 py-2 hover:bg-indigo-50 transition-colors border-b border-gray-50 last:border-0"
+                        onClick={() => { setOwnerSelected(u); setOwnerQuery(''); setOwnerDropOpen(false); }}
+                      >
+                        <p className="text-sm font-medium text-gray-900">{u.name}</p>
+                        <p className="text-xs text-gray-400">{u.email} · {u.department}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {ownerSelected && (
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={() => saveOwner(ownerSelected)}
+                    disabled={savingOwner}
+                    className="flex-1 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+                  >
+                    {savingOwner ? 'Saving…' : 'Assign Owner'}
+                  </button>
+                  {editingOwner && (
+                    <button
+                      onClick={() => { setEditingOwner(false); setOwnerSelected(null); setOwnerQuery(''); }}
+                      className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {ownerError && (
+              <p className="text-xs text-red-600">{ownerError}</p>
+            )}
+          </div>
+        )}
       </section>
 
       <section>
@@ -1312,9 +1455,12 @@ export function InventoryPage() {
         <DetailPanel
           cert={selected}
           localBus={localBus}
+          localOwner={selected.seat?.seat_name ?? localOwners[selected.serial_number] ?? ''}
+          users={users}
           onClose={() => setSelected(null)}
           onRevoke={() => setPanelMode('revoke')}
           onReissue={() => setPanelMode('reissue')}
+          onOwnerSaved={handleAssignSuccess}
         />
       )}
       {selected && (panelMode === 'revoke' || panelMode === 'reissue' || panelMode === 'cancel') && (
