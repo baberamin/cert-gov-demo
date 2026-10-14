@@ -24,6 +24,22 @@ def init_db():
                 assigned_at   TEXT NOT NULL
             )
         ''')
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS bu_assignments (
+                serial_number TEXT PRIMARY KEY,
+                bu_id         TEXT NOT NULL,
+                bu_name       TEXT NOT NULL
+            )
+        ''')
+        conn.commit()
+
+
+def save_bu_assignment(serial: str, bu_id: str, bu_name: str) -> None:
+    with _db() as conn:
+        conn.execute(
+            'INSERT OR REPLACE INTO bu_assignments (serial_number, bu_id, bu_name) VALUES (?, ?, ?)',
+            (serial, bu_id, bu_name),
+        )
         conn.commit()
 
 
@@ -55,3 +71,10 @@ def list_assignments():
     with _db() as conn:
         rows = conn.execute('SELECT serial_number, owner_name FROM owner_assignments').fetchall()
     return jsonify({r['serial_number']: r['owner_name'] for r in rows})
+
+
+@owner_store_bp.route('/api/bu-assignments')
+def list_bu_assignments():
+    with _db() as conn:
+        rows = conn.execute('SELECT serial_number, bu_id, bu_name FROM bu_assignments').fetchall()
+    return jsonify({r['serial_number']: {'id': r['bu_id'], 'name': r['bu_name']} for r in rows})

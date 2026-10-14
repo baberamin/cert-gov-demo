@@ -156,6 +156,22 @@ digicert-poc/
 
 ---
 
+## Key Architectural Decisions
+
+### DigiCert Cert BU = Profile BU, Not Seat BU (confirmed empirically 2026-10-14)
+
+When a cert is issued, DigiCert files it under the **profile's** business unit — not the seat's. Every cert issued with our "Private Server Certificate 199 Days" profile will appear under "Engineering" in DigiCert, regardless of which BU the seat belongs to.
+
+**Evidence:** Cert with `seat_id = prod1.xyc.com` had its seat in Finance & Accounting but the cert showed `business_unit: Engineering`.
+
+**Attempted fix:** Updating the profile's `allowed_list` via the DigiCert API (PUT `/mpki/api/v1/profile/{id}`) was investigated. The `allowed_list` field is not in the `PublicProfileRequest` schema (confirmed from OpenAPI spec) and only affects SSP/UI visibility, not cert BU assignment.
+
+**Actual fix:** BU selection is tracked locally in SQLite (`bu_assignments` table). On inventory load, `GET /api/bu-assignments` overlays the local BU over DigiCert's `business_unit` field. The BU filter and detail panel both use the merged effective BU. New certs persist their BU to SQLite immediately after issuance.
+
+**Implication for future work:** To truly enforce BU-scoped cert issuance in DigiCert, a separate profile per BU would be needed (each profile has one home BU). For the Saviynt NHI governance demo, local BU tracking is the right model anyway — Saviynt is the governance layer that owns BU attribution.
+
+---
+
 ## Known Limitations / To-Do
 
 - **GitHub remote not set up** — commits are local only.

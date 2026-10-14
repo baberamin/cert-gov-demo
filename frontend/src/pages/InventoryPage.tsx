@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { Chip } from '../components/Chip';
 import { SidePanel } from '../components/SidePanel';
-import { fetchCertificates, fetchBusinessUnits, revoke, reissue, cancel, fetchOwnerAssignments, assignOwner, fetchUsers, syncBusinessUnits } from '../api';
+import { fetchCertificates, fetchBusinessUnits, revoke, reissue, cancel, fetchOwnerAssignments, fetchBuAssignments, assignOwner, fetchUsers, syncBusinessUnits } from '../api';
 import type { Cert, BusinessUnit, User } from '../api';
 
 type PanelMode = 'detail' | 'revoke' | 'reissue' | 'cancel' | 'assign';
@@ -141,8 +141,9 @@ function ActionsDropdown({ cert, hasOwner, onDetail, onRevoke, onReissue, onCanc
   );
 }
 
-function DetailPanel({ cert, onClose, onRevoke, onReissue }: {
+function DetailPanel({ cert, localBus, onClose, onRevoke, onReissue }: {
   cert: Cert;
+  localBus: Record<string, { id: string; name: string }>;
   onClose: () => void;
   onRevoke: () => void;
   onReissue: () => void;
@@ -286,7 +287,7 @@ function DetailPanel({ cert, onClose, onRevoke, onReissue }: {
         <div className="space-y-2.5">
           <div>
             <p className="text-xs text-gray-400">Business Unit</p>
-            <p className="text-sm text-gray-700">{cert.business_unit?.name ?? '—'}</p>
+            <p className="text-sm text-gray-700">{(localBus[cert.serial_number] ?? cert.business_unit)?.name ?? '—'}</p>
           </div>
           <div>
             <p className="text-xs text-gray-400">Owner</p>
@@ -457,12 +458,12 @@ function isExternalCert(cert: Cert): boolean {
 
 type RecommendationScore = 'High' | 'Medium' | 'Low';
 
-function getRecommendation(cert: Cert, users: User[]): { user: User; score: RecommendationScore } | null {
+function getRecommendation(cert: Cert, users: User[], localBus: Record<string, { id: string; name: string }>): { user: User; score: RecommendationScore } | null {
   if (!users.length) return null;
 
   // Deterministic index from serial so same cert always gets same recommendation
   const hash = cert.serial_number.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  const buName = cert.business_unit?.name ?? '';
+  const buName = (localBus[cert.serial_number] ?? cert.business_unit)?.name ?? '';
 
   // BU names are long-form ("DevOps & Infrastructure") while user departments are short ("DevOps")
   // so match if the BU name contains the department name as a substring
@@ -499,9 +500,10 @@ function scoreChipClass(score: RecommendationScore) {
   return 'text-gray-500 bg-gray-100 ring-gray-200';
 }
 
-function AssignOwnerPanel({ cert, users, onClose, onSuccess }: {
+function AssignOwnerPanel({ cert, users, localBus, onClose, onSuccess }: {
   cert: Cert;
   users: User[];
+  localBus: Record<string, { id: string; name: string }>;
   onClose: () => void;
   onSuccess: (serial: string, ownerName: string) => void;
 }) {
@@ -521,7 +523,7 @@ function AssignOwnerPanel({ cert, users, onClose, onSuccess }: {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const recommendation = getRecommendation(cert, users);
+  const recommendation = getRecommendation(cert, users, localBus);
 
   const filtered = users.filter(u =>
     !query || u.name.toLowerCase().includes(query.toLowerCase()) || u.email.toLowerCase().includes(query.toLowerCase())
@@ -725,8 +727,7 @@ function IssueCertPanel({ bus, users, onClose, onIssued }: {
       } else {
         setResult(data);
         if (data.serial_number) {
-          // All BUs resolve to the real DigiCert BU — find the one with a UUID id
-          const realBu = bus.find(b => /^[0-9a-f]{8}-/.test(b.id));
+          const selectedBu = bus.find(b => b.id === selectedBuId);
           const certForState: Cert = {
             ...(data as unknown as Cert),
             serial_number: data.serial_number,
@@ -735,7 +736,7 @@ function IssueCertPanel({ bus, users, onClose, onIssued }: {
             valid_from: data.valid_from ?? '',
             valid_to: data.valid_to ?? '',
             seat: { seat_id: effectiveSeatId },
-            business_unit: realBu,
+            business_unit: selectedBu,
           };
           onIssued(certForState, selectedOwner ?? undefined);
         }
@@ -950,6 +951,7 @@ export function InventoryPage() {
   const [bus, setBus] = useState<BusinessUnit[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [localOwners, setLocalOwners] = useState<Record<string, string>>({});
+  const [localBus, setLocalBus] = useState<Record<string, { id: string; name: string }>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [issueOpen, setIssueOpen] = useState(false);
@@ -971,8 +973,10 @@ export function InventoryPage() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchCertificates(), fetchBusinessUnits(), fetchOwnerAssignments(), fetchUsers()])
-      .then(([c, b, owners, u]) => { setCerts(c); setBus(b); setLocalOwners(owners); setUsers(u); })
+    Promise.all([fetchCertificates(), fetchBusinessUnits(), fetchOwnerAssignments(), fetchBuAssignments(), fetchUsers()])
+      .then(([c, b, owners, buAssignments, u]) => {
+        setCerts(c); setBus(b); setLocalOwners(owners); setLocalBus(buAssignments); setUsers(u);
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -1021,7 +1025,10 @@ export function InventoryPage() {
       if (!haystack.includes(search.toLowerCase())) return false;
     }
     if (statusFilter && c.status !== statusFilter) return false;
-    if (buFilter && c.business_unit?.id !== buFilter) return false;
+    if (buFilter) {
+      const effectiveBuId = (localBus[c.serial_number] ?? c.business_unit)?.id;
+      if (effectiveBuId !== buFilter) return false;
+    }
     if (caFilter && certCA(c) !== caFilter) return false;
     if (ownerFilter) {
       const owner = (c.seat?.seat_name ?? localOwners[c.serial_number] ?? '').trim();
@@ -1061,6 +1068,10 @@ export function InventoryPage() {
     if (owner) {
       setLocalOwners(prev => ({ ...prev, [cert.serial_number]: owner.name }));
       assignOwner(cert.serial_number, owner.name, owner.email, cert.seat?.seat_id).catch(() => {});
+    }
+    // cert.business_unit was set to the selected BU by IssueCertPanel before calling onIssued
+    if (cert.business_unit) {
+      setLocalBus(prev => ({ ...prev, [cert.serial_number]: cert.business_unit! }));
     }
     setCerts(prev => [cert, ...prev.filter(c => c.serial_number !== cert.serial_number)]);
   }
@@ -1208,6 +1219,7 @@ export function InventoryPage() {
             ) : paginated.map(cert => {
               const isSelected = selected?.serial_number === cert.serial_number;
               const owner = cert.seat?.seat_name ?? localOwners[cert.serial_number] ?? '';
+              const effectiveBu = localBus[cert.serial_number] ?? cert.business_unit;
               const caVendor = cert.ca_vendor ?? cert.issuing_ca_name ?? cert.ica?.name ?? cert.issuer?.common_name ?? cert.issuer?.organization ?? '—';
               const quantumSafe = isQuantumSafe(cert);
               return (
@@ -1218,7 +1230,7 @@ export function InventoryPage() {
                 >
                   <td className="px-4 py-3 font-medium text-gray-900">{cert.common_name ?? cert.seat?.seat_id ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-600">{caVendor}</td>
-                  <td className="px-4 py-3 text-gray-600">{cert.business_unit?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-gray-600">{effectiveBu?.name ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-600">{owner}</td>
                   <td className="px-4 py-3">
                     <Chip label={statusLabel(cert.status)} color={statusColor(cert.status)} />
@@ -1285,6 +1297,7 @@ export function InventoryPage() {
       {selected && panelMode === 'detail' && (
         <DetailPanel
           cert={selected}
+          localBus={localBus}
           onClose={() => setSelected(null)}
           onRevoke={() => setPanelMode('revoke')}
           onReissue={() => setPanelMode('reissue')}
@@ -1302,6 +1315,7 @@ export function InventoryPage() {
         <AssignOwnerPanel
           cert={selected}
           users={users}
+          localBus={localBus}
           onClose={() => setSelected(null)}
           onSuccess={handleAssignSuccess}
         />

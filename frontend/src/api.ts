@@ -84,6 +84,12 @@ export async function fetchOwnerAssignments(): Promise<Record<string, string>> {
   return res.json();
 }
 
+export async function fetchBuAssignments(): Promise<Record<string, { id: string; name: string }>> {
+  const res = await fetch('/api/bu-assignments');
+  if (!res.ok) return {};
+  return res.json();
+}
+
 export async function assignOwner(
   serial: string,
   ownerName: string,

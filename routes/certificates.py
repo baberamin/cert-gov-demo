@@ -4,7 +4,8 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 import digicert_client as dc
-from routes.ownership import ensure_seat_exists
+from routes.ownership import ensure_seat_exists, get_business_units
+from routes.owner_store import save_bu_assignment
 
 certificates_bp = Blueprint('certificates', __name__)
 
@@ -121,4 +122,16 @@ def issue_certificate():
 
     result = dc.post('/mpki/api/v1/certificate', enroll_body)
     result['private_key'] = key_pem
+
+    # Save BU locally — DigiCert always files certs under the profile's BU (Engineering),
+    # so we track the user's intended BU in SQLite and overlay it in the inventory.
+    serial = result.get('serial_number')
+    if serial and business_unit_id:
+        bu_name = next(
+            (b['name'] for b in get_business_units() if b['id'] == business_unit_id),
+            None,
+        )
+        if bu_name:
+            save_bu_assignment(serial, business_unit_id, bu_name)
+
     return jsonify(result), 201
