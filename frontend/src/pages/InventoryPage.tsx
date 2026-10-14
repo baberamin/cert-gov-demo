@@ -70,15 +70,24 @@ interface ActionsDropdownProps {
 
 function ActionsDropdown({ cert, hasOwner, onDetail, onRevoke, onReissue, onCancel, onAssign }: ActionsDropdownProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
+    if (!open) return;
+    function handleClick() { setOpen(false); }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+  }, [open]);
+
+  function handleOpen(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setOpen(v => !v);
+  }
 
   const isPending = cert.status === 'pending';
   const isActive = cert.status === 'issued' || cert.status === 'active';
@@ -87,16 +96,21 @@ function ActionsDropdown({ cert, hasOwner, onDetail, onRevoke, onReissue, onCanc
   const canCancel = isPending;
 
   return (
-    <div ref={ref} className="relative">
+    <div>
       <button
-        onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+        ref={btnRef}
+        onClick={handleOpen}
         className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700"
         aria-label="Actions"
       >
         ⋯
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-30 py-1">
+        <div
+          className="fixed w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1"
+          style={{ top: menuPos.top, right: menuPos.right }}
+          onMouseDown={e => e.stopPropagation()}
+        >
           <button
             className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
             onClick={() => { setOpen(false); onDetail(); }}
