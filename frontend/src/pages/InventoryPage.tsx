@@ -1130,7 +1130,7 @@ export function InventoryPage() {
   const [syncResult, setSyncResult] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState(ALL);
+  const [statusFilter, setStatusFilter] = useState('issued');
   const [buFilter, setBuFilter] = useState(ALL);
   const [caFilter, setCaFilter] = useState(ALL);
   const [ownerFilter, setOwnerFilter] = useState(ALL);
@@ -1220,11 +1220,11 @@ export function InventoryPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const filtersActive = !!(search || statusFilter || buFilter || caFilter || ownerFilter);
+  const filtersActive = !!(search || (statusFilter && statusFilter !== 'issued') || buFilter || caFilter || ownerFilter);
 
   function clearFilters() {
     setSearch('');
-    setStatusFilter(ALL);
+    setStatusFilter('issued');
     setBuFilter(ALL);
     setCaFilter(ALL);
     setOwnerFilter(ALL);
