@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { Chip } from '../components/Chip';
 import { SidePanel } from '../components/SidePanel';
-import { fetchCertificates, fetchBusinessUnits, revoke, reissue, cancel, fetchOwnerAssignments, assignOwner, fetchUsers } from '../api';
+import { fetchCertificates, fetchBusinessUnits, revoke, reissue, cancel, fetchOwnerAssignments, assignOwner, fetchUsers, syncBusinessUnits } from '../api';
 import type { Cert, BusinessUnit, User } from '../api';
 
 type PanelMode = 'detail' | 'revoke' | 'reissue' | 'cancel' | 'assign';
@@ -290,7 +290,7 @@ function DetailPanel({ cert, onClose, onRevoke, onReissue }: {
           </div>
           <div>
             <p className="text-xs text-gray-400">Owner</p>
-            <p className="text-sm text-gray-700">{cert.seat?.user_name ?? '—'}</p>
+            <p className="text-sm text-gray-700">{cert.seat?.seat_name ?? '—'}</p>
           </div>
           {cert.ca_vendor && (
             <div>
@@ -464,7 +464,9 @@ function getRecommendation(cert: Cert, users: User[]): { user: User; score: Reco
   const hash = cert.serial_number.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
   const buName = cert.business_unit?.name ?? '';
 
-  const deptUsers = users.filter(u => buName && u.department.toLowerCase() === buName.toLowerCase());
+  // BU names are long-form ("DevOps & Infrastructure") while user departments are short ("DevOps")
+  // so match if the BU name contains the department name as a substring
+  const deptUsers = users.filter(u => buName && buName.toLowerCase().includes(u.department.toLowerCase()));
   const adjacentDepts: Record<string, string[]> = {
     Engineering: ['DevOps'],
     DevOps: ['Engineering'],
@@ -529,7 +531,7 @@ function AssignOwnerPanel({ cert, users, onClose, onSuccess }: {
     setLoading(true);
     setError('');
     try {
-      await assignOwner(cert.serial_number, user.name);
+      await assignOwner(cert.serial_number, user.name, user.email, cert.seat?.seat_id);
       onSuccess(cert.serial_number, user.name);
       onClose();
     } catch (e) {
@@ -664,9 +666,11 @@ function IssueCertPanel({ bus, users, onClose, onIssued }: {
   bus: BusinessUnit[];
   users: User[];
   onClose: () => void;
-  onIssued: (cert: Cert, ownerName?: string) => void;
+  onIssued: (cert: Cert, owner?: User) => void;
 }) {
   const [commonName, setCommonName] = useState('');
+  const [seatId, setSeatId] = useState('');
+  const [seatIdEdited, setSeatIdEdited] = useState(false);
   const [dnsNamesRaw, setDnsNamesRaw] = useState('');
   const [selectedBuId, setSelectedBuId] = useState('');
   const [selectedOwner, setSelectedOwner] = useState<User | null>(null);
@@ -699,6 +703,7 @@ function IssueCertPanel({ bus, users, onClose, onIssued }: {
   async function handleSubmit() {
     const cn = commonName.trim();
     if (!cn) return;
+    const effectiveSeatId = seatId.trim() || cn;
     const dns_names = dnsNamesRaw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
     if (!dns_names.length) dns_names.push(cn);
     setLoading(true);
@@ -710,7 +715,7 @@ function IssueCertPanel({ bus, users, onClose, onIssued }: {
         body: JSON.stringify({
           common_name: cn,
           dns_names,
-          seat_id: cn,
+          seat_id: effectiveSeatId,
           ...(selectedBuId && { business_unit_id: selectedBuId }),
         }),
       });
@@ -729,10 +734,10 @@ function IssueCertPanel({ bus, users, onClose, onIssued }: {
             status: data.status ?? 'issued',
             valid_from: data.valid_from ?? '',
             valid_to: data.valid_to ?? '',
-            seat: { seat_id: cn },
+            seat: { seat_id: effectiveSeatId },
             business_unit: realBu,
           };
-          onIssued(certForState, selectedOwner?.name);
+          onIssued(certForState, selectedOwner ?? undefined);
         }
       }
     } catch (e) {
@@ -830,8 +835,25 @@ function IssueCertPanel({ bus, users, onClose, onIssued }: {
           <input
             type="text"
             value={commonName}
-            onChange={e => setCommonName(e.target.value)}
+            onChange={e => {
+              setCommonName(e.target.value);
+              if (!seatIdEdited) setSeatId(e.target.value);
+            }}
             placeholder="e.g. myservice.acme.com"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">
+            Seat ID
+            <span className="text-gray-400 ml-1">(defaults to Common Name — reuses an existing DigiCert seat)</span>
+          </label>
+          <input
+            type="text"
+            value={seatId}
+            onChange={e => { setSeatId(e.target.value); setSeatIdEdited(true); }}
+            placeholder={commonName.trim() || 'Defaults to Common Name'}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
@@ -931,6 +953,8 @@ export function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [issueOpen, setIssueOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState(ALL);
@@ -982,7 +1006,7 @@ export function InventoryPage() {
   const caOptions = Array.from(new Set(certs.map(certCA).filter(Boolean))).sort();
 
   const ownerOptions = Array.from(new Set(
-    certs.map(c => (c.seat?.user_name ?? localOwners[c.serial_number] ?? '').trim()).filter(Boolean)
+    certs.map(c => (c.seat?.seat_name ?? localOwners[c.serial_number] ?? '').trim()).filter(Boolean)
   )).sort();
 
   const filtered = certs.filter(c => {
@@ -1000,7 +1024,7 @@ export function InventoryPage() {
     if (buFilter && c.business_unit?.id !== buFilter) return false;
     if (caFilter && certCA(c) !== caFilter) return false;
     if (ownerFilter) {
-      const owner = (c.seat?.user_name ?? localOwners[c.serial_number] ?? '').trim();
+      const owner = (c.seat?.seat_name ?? localOwners[c.serial_number] ?? '').trim();
       if (owner !== ownerFilter) return false;
     }
     return true;
@@ -1033,12 +1057,35 @@ export function InventoryPage() {
     setLocalOwners(prev => ({ ...prev, [serial]: ownerName }));
   }
 
-  function handleIssued(cert: Cert, ownerName?: string) {
-    if (ownerName) {
-      setLocalOwners(prev => ({ ...prev, [cert.serial_number]: ownerName }));
-      assignOwner(cert.serial_number, ownerName).catch(() => {});
+  function handleIssued(cert: Cert, owner?: User) {
+    if (owner) {
+      setLocalOwners(prev => ({ ...prev, [cert.serial_number]: owner.name }));
+      assignOwner(cert.serial_number, owner.name, owner.email, cert.seat?.seat_id).catch(() => {});
     }
     setCerts(prev => [cert, ...prev.filter(c => c.serial_number !== cert.serial_number)]);
+  }
+
+  async function handleSyncBUs() {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await syncBusinessUnits();
+      const created = res.results.filter(r => r.status === 'created').map(r => r.name);
+      const found = res.results.filter(r => r.status === 'found').map(r => r.name);
+      const errors = res.results.filter(r => r.status === 'error').map(r => r.name);
+      const parts = [];
+      if (created.length) parts.push(`Created: ${created.join(', ')}`);
+      if (found.length) parts.push(`Found: ${found.join(', ')}`);
+      if (errors.length) parts.push(`Failed: ${errors.join(', ')}`);
+      setSyncResult(parts.length ? parts.join(' · ') : 'All BUs up to date');
+      // Refresh BU list
+      const newBus = await fetchBusinessUnits();
+      setBus(newBus);
+    } catch (e) {
+      setSyncResult(e instanceof Error ? e.message : 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
   }
 
   if (loading) return (
@@ -1111,13 +1158,26 @@ export function InventoryPage() {
           </button>
         )}
 
-        <button
-          onClick={() => setIssueOpen(true)}
-          className="ml-auto px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium whitespace-nowrap"
-        >
-          + Issue Certificate
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleSyncBUs}
+            disabled={syncing}
+            title="Create/sync demo Business Units in DigiCert so BU assignment works"
+            className="px-3 py-2 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors whitespace-nowrap"
+          >
+            {syncing ? 'Syncing…' : 'Sync BUs'}
+          </button>
+          <button
+            onClick={() => setIssueOpen(true)}
+            className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium whitespace-nowrap"
+          >
+            + Issue Certificate
+          </button>
+        </div>
       </div>
+      {syncResult && (
+        <p className="text-xs text-gray-500 mb-2">{syncResult}</p>
+      )}
 
       {/* Range indicator */}
       <p className="text-xs text-gray-500 mb-3">
@@ -1147,7 +1207,7 @@ export function InventoryPage() {
               </tr>
             ) : paginated.map(cert => {
               const isSelected = selected?.serial_number === cert.serial_number;
-              const owner = cert.seat?.user_name ?? localOwners[cert.serial_number] ?? '';
+              const owner = cert.seat?.seat_name ?? localOwners[cert.serial_number] ?? '';
               const caVendor = cert.ca_vendor ?? cert.issuing_ca_name ?? cert.ica?.name ?? cert.issuer?.common_name ?? cert.issuer?.organization ?? '—';
               const quantumSafe = isQuantumSafe(cert);
               return (

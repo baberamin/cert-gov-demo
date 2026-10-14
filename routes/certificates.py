@@ -4,7 +4,7 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 import digicert_client as dc
-from routes.ownership import resolve_bu_id
+from routes.ownership import ensure_seat_exists
 
 certificates_bp = Blueprint('certificates', __name__)
 
@@ -49,19 +49,33 @@ def _extract_certs(data):
     return data.get('certificates', data.get('items', data.get('results', [])))
 
 
+def _fetch_all_certs(params, max_pages=5):
+    """Paginate certificate-search using limit/offset (max 100 per page per spec)."""
+    all_certs = []
+    limit = 100
+    for page in range(max_pages):
+        data = dc.get('/mpki/api/v1/certificate-search',
+                      params={**params, 'limit': limit, 'offset': page * limit})
+        if isinstance(data, list):
+            all_certs.extend(data)
+            break
+        certs = _extract_certs(data)
+        all_certs.extend(certs)
+        if not data.get('has_more', False):
+            break
+    return all_certs
+
+
 @certificates_bp.route('/api/certificates')
 def list_certificates():
     args = dict(request.args)
-    data = dc.get('/mpki/api/v1/certificate-search', params=args)
-    certs = _extract_certs(data)
+    certs = _fetch_all_certs(args)
 
     # For open searches (no targeted filter), also pull our GenPrivateCA certs
     # because DigiCert's default search scope may exclude private-CA issuances
     if not any(k in args for k in ('seat_id', 'serial_number', 'profile_id')):
         try:
-            profile_data = dc.get('/mpki/api/v1/certificate-search',
-                                  params={**args, 'profile_id': PROFILE_ID})
-            profile_certs = _extract_certs(profile_data)
+            profile_certs = _fetch_all_certs({**args, 'profile_id': PROFILE_ID})
             existing = {c.get('serial_number') for c in certs}
             certs = certs + [c for c in profile_certs if c.get('serial_number') not in existing]
         except Exception:
@@ -93,14 +107,17 @@ def issue_certificate():
 
     csr_pem, key_pem = _generate_csr(common_name, dns_names)
 
+    # Seat must exist in the right BU before enrollment — BU is determined by seat membership,
+    # not the enrollment body. Create/move the seat now so the cert inherits the correct BU.
+    if business_unit_id:
+        ensure_seat_exists(seat_id, business_unit_id)
+
     enroll_body = {
         'profile': {'id': PROFILE_ID},
         'csr': csr_pem,
         'seat': {'seat_id': seat_id},
         'attributes': {'subject.common_name': common_name},
     }
-    if business_unit_id:
-        enroll_body['business_unit'] = {'id': resolve_bu_id(business_unit_id)}
 
     result = dc.post('/mpki/api/v1/certificate', enroll_body)
     result['private_key'] = key_pem

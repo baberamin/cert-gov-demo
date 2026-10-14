@@ -7,7 +7,7 @@ export interface Cert {
   profile?: { id: string; name: string };
   business_unit?: { id: string; name: string };
   san?: { dns_names?: string[]; ip_addresses?: string[] };
-  seat?: { seat_id?: string; user_name?: string };
+  seat?: { seat_id?: string; seat_name?: string; email?: string };
   subject?: { common_name?: string; organization_name?: string; organization_units?: string[] };
   key_size?: string | number;
   signature_algorithm?: string;
@@ -84,11 +84,22 @@ export async function fetchOwnerAssignments(): Promise<Record<string, string>> {
   return res.json();
 }
 
-export async function assignOwner(serial: string, ownerName: string): Promise<void> {
+export async function assignOwner(
+  serial: string,
+  ownerName: string,
+  ownerEmail?: string,
+  seatId?: string,
+): Promise<void> {
   const res = await fetch(`/api/certificates/${serial}/assign-owner`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ owner_name: ownerName }),
+    body: JSON.stringify({ owner_name: ownerName, owner_email: ownerEmail, seat_id: seatId }),
   });
   if (!res.ok) throw new Error(await res.text());
+}
+
+export async function syncBusinessUnits(): Promise<{ results: { name: string; status: string; id?: string }[] }> {
+  const res = await fetch('/api/business-units/sync', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
