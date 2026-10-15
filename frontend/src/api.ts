@@ -113,3 +113,52 @@ export async function syncBusinessUnits(): Promise<{ results: { name: string; st
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export interface Finding {
+  id: string;
+  serial_number: string;
+  common_name: string | null;
+  finding_type: 'expiring_soon' | 'unowned' | 'weak_key' | 'long_lived' | 'quantum_unsafe';
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  status: 'open' | 'in-review' | 'resolved';
+  detail: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OverviewStats {
+  total_active: number;
+  owned_pct: number;
+  expiring_30: number;
+  expiring_60: number;
+  expiring_90: number;
+  findings_critical: number;
+  findings_high: number;
+  findings_medium: number;
+  findings_low: number;
+}
+
+export async function fetchFindings(): Promise<Finding[]> {
+  const res = await fetch('/api/findings');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchOverview(): Promise<OverviewStats> {
+  const res = await fetch('/api/overview');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function updateFindingStatus(
+  id: string,
+  status: 'open' | 'in-review' | 'resolved',
+): Promise<Finding> {
+  const res = await fetch(`/api/findings/${encodeURIComponent(id)}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
