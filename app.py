@@ -12,13 +12,16 @@ def create_app():
     from routes.remediation import remediation_bp
     from routes.owner_store import owner_store_bp, init_db
     from routes.users import users_bp
+    from routes.findings import findings_bp, init_findings_db
 
     app.register_blueprint(certificates_bp)
     app.register_blueprint(ownership_bp)
     app.register_blueprint(remediation_bp)
     app.register_blueprint(owner_store_bp)
     app.register_blueprint(users_bp)
+    app.register_blueprint(findings_bp)
     init_db()
+    init_findings_db()
 
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
