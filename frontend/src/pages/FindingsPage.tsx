@@ -1,9 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { Chip } from '../components/Chip';
 import { SidePanel } from '../components/SidePanel';
-import { FINDINGS } from '../mockData';
-import type { Finding } from '../mockData';
+import { fetchFindings, updateFindingStatus, revoke } from '../api';
+import type { Finding } from '../api';
+
+const FINDING_LABELS: Record<string, string> = {
+  expiring_soon:  'Certificate Expiring Soon',
+  unowned:        'Unowned Certificate',
+  weak_key:       'Weak Key Size',
+  long_lived:     'Long-Lived Certificate',
+  quantum_unsafe: 'Quantum-Unsafe Algorithm',
+};
+
+const FINDING_CATEGORIES: Record<string, string> = {
+  expiring_soon:  'Expiry Risk',
+  unowned:        'Ownership',
+  weak_key:       'Key Compliance',
+  long_lived:     'Expiry Risk',
+  quantum_unsafe: 'Quantum Safety',
+};
+
+const FINDING_REMEDIATION: Record<string, string> = {
+  expiring_soon:  'Revoke and reissue the certificate to extend its validity period.',
+  unowned:        'Assign an owner via the Certificate Inventory Assign Owner action.',
+  weak_key:       'Revoke and reissue with a minimum 2048-bit RSA or 256-bit EC key.',
+  long_lived:     'Consider revoking and reissuing with a validity period ≤ 365 days.',
+  quantum_unsafe: 'Plan migration to a quantum-safe algorithm when available in the profile.',
+};
+
+const TYPE_OPTIONS = Object.entries(FINDING_LABELS).map(([value, label]) => ({ value, label }));
+const SEVERITIES = ['critical', 'high', 'medium', 'low'];
+const STATUSES = ['open', 'in-review', 'resolved'];
+const ALL = '';
 
 function severityColor(s: string): 'red' | 'amber' | 'blue' | 'gray' {
   if (s === 'critical') return 'red';
@@ -20,110 +49,97 @@ function statusColor(s: string): 'red' | 'amber' | 'green' | 'gray' {
 }
 
 function statusLabel(s: string) {
-  const map: Record<string, string> = { open: 'Open', 'in-review': 'In Review', resolved: 'Resolved' };
-  return map[s] ?? s;
+  return ({ open: 'Open', 'in-review': 'In Review', resolved: 'Resolved' } as Record<string, string>)[s] ?? s;
 }
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-const ALL = '';
-const CATEGORIES = Array.from(new Set(FINDINGS.map(f => f.category))).sort();
-const SEVERITIES = ['critical', 'high', 'medium', 'low'];
-const STATUSES = ['open', 'in-review', 'resolved'];
-
 export function FindingsPage() {
-  const [catFilter, setCatFilter] = useState(ALL);
+  const [findings, setFindings] = useState<Finding[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState(ALL);
   const [sevFilter, setSevFilter] = useState(ALL);
   const [stFilter, setStFilter] = useState(ALL);
   const [selected, setSelected] = useState<Finding | null>(null);
-  const [localStatus, setLocalStatus] = useState<Record<string, Finding['status']>>({});
+  const [revokeMsg, setRevokeMsg] = useState('');
 
-  function getStatus(f: Finding): Finding['status'] {
-    return localStatus[f.id] ?? f.status;
+  useEffect(() => {
+    fetchFindings().then(setFindings).finally(() => setLoading(false));
+  }, []);
+
+  async function markStatus(id: string, status: Finding['status']) {
+    try {
+      const updated = await updateFindingStatus(id, status);
+      setFindings(prev => prev.map(f => f.id === id ? updated : f));
+      if (selected?.id === id) setSelected(updated);
+    } catch { /* silent */ }
   }
 
-  const filtered = FINDINGS.filter(f => {
-    if (catFilter && f.category !== catFilter) return false;
+  async function handleRevoke(serial: string) {
+    setRevokeMsg('Revoking...');
+    try {
+      await revoke(serial, 'KEY_COMPROMISE');
+      setRevokeMsg('Revoked. Refresh page to update findings.');
+    } catch {
+      setRevokeMsg('Revoke failed.');
+    }
+  }
+
+  const filtered = findings.filter(f => {
+    if (typeFilter && f.finding_type !== typeFilter) return false;
     if (sevFilter && f.severity !== sevFilter) return false;
-    if (stFilter && getStatus(f) !== stFilter) return false;
+    if (stFilter && f.status !== stFilter) return false;
     return true;
   });
 
-  function markInReview(id: string) {
-    setLocalStatus(prev => ({ ...prev, [id]: 'in-review' }));
-    if (selected?.id === id) setSelected(f => f ? { ...f, status: 'in-review' } : f);
-  }
-
-  function markResolved(id: string) {
-    setLocalStatus(prev => ({ ...prev, [id]: 'resolved' }));
-    if (selected?.id === id) setSelected(f => f ? { ...f, status: 'resolved' } : f);
-  }
-
-  const selectedStatus = selected ? getStatus(selected) : null;
-
   const panelFooter = selected ? (
     <>
-      {selectedStatus === 'open' && (
+      {selected.status === 'open' && (
         <button
-          onClick={() => markInReview(selected.id)}
+          onClick={() => markStatus(selected.id, 'in-review')}
           className="flex-1 px-4 py-2 text-sm border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 transition-colors"
         >
           Mark In Review
         </button>
       )}
-      {(selectedStatus === 'open' || selectedStatus === 'in-review') && (
+      {(selected.status === 'open' || selected.status === 'in-review') && (
         <button
-          onClick={() => markResolved(selected.id)}
+          onClick={() => markStatus(selected.id, 'resolved')}
           className="flex-1 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
         >
           Mark Resolved
         </button>
       )}
-      {selectedStatus === 'resolved' && (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset text-green-700 bg-green-50 ring-green-200">
-          Resolved
-        </span>
-      )}
+      {selected.status === 'resolved' && <Chip label="Resolved" color="green" />}
     </>
   ) : undefined;
+
+  if (loading) return <div className="text-center py-16 text-gray-400">Loading findings...</div>;
 
   return (
     <div>
       <PageHeader title="Findings" subtitle="Security findings from certificate posture analysis." />
 
-      {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <select
-          value={catFilter}
-          onChange={e => setCatFilter(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          <option value="">All Categories</option>
-          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">All Types</option>
+          {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-
-        <select
-          value={sevFilter}
-          onChange={e => setSevFilter(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
+        <select value={sevFilter} onChange={e => setSevFilter(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
           <option value="">All Severities</option>
-          {SEVERITIES.map(s => <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          {SEVERITIES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
         </select>
-
-        <select
-          value={stFilter}
-          onChange={e => setStFilter(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
+        <select value={stFilter} onChange={e => setStFilter(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
           <option value="">All Statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
         </select>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -131,7 +147,7 @@ export function FindingsPage() {
               <th className="text-xs uppercase text-gray-500 px-4 py-3 text-left font-medium tracking-wide">Finding</th>
               <th className="text-xs uppercase text-gray-500 px-4 py-3 text-left font-medium tracking-wide">Category</th>
               <th className="text-xs uppercase text-gray-500 px-4 py-3 text-left font-medium tracking-wide">Severity</th>
-              <th className="text-xs uppercase text-gray-500 px-4 py-3 text-left font-medium tracking-wide">Affected</th>
+              <th className="text-xs uppercase text-gray-500 px-4 py-3 text-left font-medium tracking-wide">Affected Cert</th>
               <th className="text-xs uppercase text-gray-500 px-4 py-3 text-left font-medium tracking-wide">Detected</th>
               <th className="text-xs uppercase text-gray-500 px-4 py-3 text-left font-medium tracking-wide">Status</th>
             </tr>
@@ -141,64 +157,67 @@ export function FindingsPage() {
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">No findings match filters.</td>
               </tr>
-            ) : filtered.map(f => {
-              const st = getStatus(f);
-              const isSelected = selected?.id === f.id;
-              return (
-                <tr
-                  key={f.id}
-                  onClick={() => setSelected({ ...f, status: st })}
-                  className={`border-b border-gray-100 cursor-pointer transition-colors ${isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
-                >
-                  <td className="px-4 py-3 font-medium text-gray-900">{f.title}</td>
-                  <td className="px-4 py-3 text-gray-600">{f.category}</td>
-                  <td className="px-4 py-3"><Chip label={f.severity.charAt(0).toUpperCase() + f.severity.slice(1)} color={severityColor(f.severity)} /></td>
-                  <td className="px-4 py-3 text-gray-600">{f.affectedAsset}</td>
-                  <td className="px-4 py-3 text-gray-600">{formatDate(f.detectedOn)}</td>
-                  <td className="px-4 py-3"><Chip label={statusLabel(st)} color={statusColor(st)} /></td>
-                </tr>
-              );
-            })}
+            ) : filtered.map(f => (
+              <tr key={f.id} onClick={() => { setSelected(f); setRevokeMsg(''); }}
+                className={`border-b border-gray-100 cursor-pointer transition-colors ${selected?.id === f.id ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}>
+                <td className="px-4 py-3 font-medium text-gray-900">{FINDING_LABELS[f.finding_type] ?? f.finding_type}</td>
+                <td className="px-4 py-3 text-gray-600">{FINDING_CATEGORIES[f.finding_type] ?? '—'}</td>
+                <td className="px-4 py-3"><Chip label={f.severity.charAt(0).toUpperCase() + f.severity.slice(1)} color={severityColor(f.severity)} /></td>
+                <td className="px-4 py-3 text-gray-600">{f.common_name ?? f.serial_number}</td>
+                <td className="px-4 py-3 text-gray-600">{formatDate(f.created_at)}</td>
+                <td className="px-4 py-3"><Chip label={statusLabel(f.status)} color={statusColor(f.status)} /></td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
-      {/* Detail panel */}
       {selected && (
         <SidePanel title="Finding Detail" onClose={() => setSelected(null)} footer={panelFooter}>
           <div className="mb-4">
-            <h2 className="text-base font-semibold text-gray-900 mb-1">{selected.title}</h2>
+            <h2 className="text-base font-semibold text-gray-900 mb-1">{FINDING_LABELS[selected.finding_type] ?? selected.finding_type}</h2>
             <div className="flex gap-2 mt-2">
               <Chip label={selected.severity.charAt(0).toUpperCase() + selected.severity.slice(1)} color={severityColor(selected.severity)} />
-              <Chip label={statusLabel(selectedStatus!)} color={statusColor(selectedStatus!)} />
+              <Chip label={statusLabel(selected.status)} color={statusColor(selected.status)} />
             </div>
           </div>
-
           <div className="space-y-4 text-sm">
             <div>
               <p className="text-xs text-gray-400 mb-1">Description</p>
-              <p className="text-gray-700">{selected.description}</p>
+              <p className="text-gray-700">{selected.detail}</p>
             </div>
             <div>
               <p className="text-xs text-gray-400 mb-1">Category</p>
-              <p className="text-gray-700">{selected.category}</p>
+              <p className="text-gray-700">{FINDING_CATEGORIES[selected.finding_type] ?? '—'}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400 mb-1">Affected Asset</p>
-              <p className="text-gray-700">{selected.affectedAsset}</p>
+              <p className="text-xs text-gray-400 mb-1">Affected Certificate</p>
+              <p className="text-gray-700">{selected.common_name ?? selected.serial_number}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400 mb-1">Affected Count</p>
-              <p className="text-gray-700">{selected.affectedCount}</p>
+              <p className="text-xs text-gray-400 mb-1">Detected</p>
+              <p className="text-gray-700">{formatDate(selected.created_at)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400 mb-1">Detected On</p>
-              <p className="text-gray-700">{formatDate(selected.detectedOn)}</p>
+              <p className="text-xs text-gray-400 mb-1">Remediation</p>
+              <p className="text-gray-700">{FINDING_REMEDIATION[selected.finding_type] ?? 'Review and take appropriate action.'}</p>
             </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-1">Remediation Steps</p>
-              <p className="text-gray-700">{selected.remediationSteps}</p>
+            <div className="pt-2 border-t border-gray-100">
+              <a href="/inventory" className="text-sm text-indigo-600 hover:text-indigo-800">
+                View in Inventory →
+              </a>
             </div>
+            {(selected.finding_type === 'expiring_soon' || selected.finding_type === 'weak_key') && selected.status !== 'resolved' && (
+              <div>
+                <button
+                  onClick={() => handleRevoke(selected.serial_number)}
+                  className="w-full px-4 py-2 text-sm border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors"
+                >
+                  Revoke Certificate
+                </button>
+                {revokeMsg && <p className="text-xs text-gray-500 mt-1 text-center">{revokeMsg}</p>}
+              </div>
+            )}
           </div>
         </SidePanel>
       )}
