@@ -162,3 +162,78 @@ export async function updateFindingStatus(
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export interface CampaignItem {
+  id: string;
+  campaign_id: string;
+  serial_number: string;
+  common_name: string | null;
+  seat_id: string | null;
+  owner: string;
+  bu_name: string;
+  valid_to: string;
+  decision: 'approved' | 'revoked' | 'reassigned' | null;
+  new_owner: string | null;
+  new_owner_email: string | null;
+  decided_at: string | null;
+}
+
+export interface Campaign {
+  id: string;
+  name: string;
+  scope_bu_id: string | null;
+  deadline: string | null;
+  status: 'active' | 'completed' | 'cancelled';
+  created_at: string;
+  total: number;
+  approved: number;
+  revoked: number;
+  reassigned: number;
+  pending: number;
+}
+
+export interface CampaignDetail extends Campaign {
+  items: CampaignItem[];
+}
+
+export async function fetchCampaigns(): Promise<Campaign[]> {
+  const res = await fetch('/api/campaigns');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchCampaign(id: string): Promise<CampaignDetail> {
+  const res = await fetch(`/api/campaigns/${id}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function createCampaign(
+  name: string,
+  scope_bu_id?: string,
+  deadline?: string,
+): Promise<{ id: string; name: string; item_count: number }> {
+  const res = await fetch('/api/campaigns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, scope_bu_id: scope_bu_id || null, deadline: deadline || null }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function decideCampaignItem(
+  campaignId: string,
+  serial: string,
+  decision: 'approved' | 'revoked' | 'reassigned',
+  new_owner?: string,
+  new_owner_email?: string,
+): Promise<CampaignItem> {
+  const res = await fetch(`/api/campaigns/${campaignId}/items/${serial}/decide`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision, new_owner, new_owner_email }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
