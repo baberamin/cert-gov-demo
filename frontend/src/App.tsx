@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { OverviewPage } from './pages/OverviewPage';
 import { InventoryPage } from './pages/InventoryPage';
 import { FindingsPage } from './pages/FindingsPage';
+import { CampaignsPage } from './pages/CampaignsPage';
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/findings" element={<FindingsPage />} />
         </Routes>
       </main>

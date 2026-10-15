@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 const navItems = [
   { label: 'Overview', to: '/' },
   { label: 'Certificate Inventory', to: '/inventory' },
+  { label: 'Campaigns', to: '/campaigns' },
   { label: 'Findings', to: '/findings' },
 ];
 
