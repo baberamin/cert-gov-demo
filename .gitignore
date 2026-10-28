@@ -10,3 +10,4 @@ owner_assignments.db
 CLAUDE_BUILD_BRIEF.md
 keyinfodigicertone.png
 *.png
+.DS_Store

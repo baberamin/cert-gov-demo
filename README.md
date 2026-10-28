@@ -58,6 +58,16 @@ A reset makes sure the demo certificates exist (issuing any that are missing fro
 
 More detail, DigiCert API findings, and known limitations are in [STATUS.md](STATUS.md).
 
+## Known limitations
+
+- **Reissue does not carry over SANs.** The replacement certificate gets the old certificate's common name and seat only.
+- **Cancel is not supported.** DigiCert has no cancel endpoint for this profile, so the Cancel action returns an error.
+- **The demo runs against a shared tenant.** The demo certificates are real objects that expire (199-day profile); `make demo-reset` re-issues missing ones. Do not use Revoke during a demo.
+- **Certificates issued outside this app** (the DigiCert console, another process) can take up to 30 seconds to appear.
+- **Findings include expired certificates**, so low-severity counts run large.
+
+The full list, with DigiCert API findings, is in [STATUS.md](STATUS.md).
+
 ## Parked: access review campaigns
 
 The Exceptions page replaced Campaigns in the sidebar. The campaigns feature still exists and works; it is only unlinked.
