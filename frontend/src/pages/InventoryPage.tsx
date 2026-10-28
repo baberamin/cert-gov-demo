@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { PageHeader } from '../components/PageHeader';
 import { Chip } from '../components/Chip';
 import { SidePanel } from '../components/SidePanel';
+import { OwnerRecommendation } from '../components/OwnerRecommendation';
 import { fetchCertificates, fetchBusinessUnits, revoke, reissue, cancel, fetchOwnerAssignments, fetchBuAssignments, assignOwner, fetchUsers, syncBusinessUnits } from '../api';
 import type { Cert, BusinessUnit, User } from '../api';
 
@@ -181,7 +182,6 @@ function DetailPanel({ cert, localBus, localOwner, users, onClose, onRevoke, onR
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const recommendation = getRecommendation(cert, users, localBus);
   const showOwnerPicker = !localOwner || editingOwner;
 
   const filteredOwners = users.filter(u =>
@@ -376,32 +376,13 @@ function DetailPanel({ cert, localBus, localOwner, users, onClose, onRevoke, onR
         {/* Inline owner assignment / change */}
         {showOwnerPicker && (
           <div className="border-t border-gray-100 pt-3 space-y-3">
-            {/* Recommendation */}
-            {recommendation && !editingOwner && (
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Recommended Owner</p>
-                <div className="border border-gray-200 rounded-lg px-3 py-2.5 bg-white">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <p className="text-sm font-medium text-gray-900">{recommendation.user.name}</p>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${scoreChipClass(recommendation.score)}`}>
-                      {recommendation.score}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-400 mb-2">{recommendation.user.email} · {recommendation.user.department}</p>
-                  <button
-                    onClick={() => saveOwner(recommendation.user)}
-                    disabled={savingOwner}
-                    className="w-full px-3 py-1.5 text-sm border border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50 disabled:opacity-40 transition-colors"
-                  >
-                    {savingOwner ? 'Saving…' : 'Accept Recommendation'}
-                  </button>
-                </div>
-              </div>
+            {!editingOwner && (
+              <OwnerRecommendation serial={cert.serial_number} users={users} busy={savingOwner} onAccept={saveOwner} />
             )}
 
             {/* Picker */}
             <div>
-              {recommendation && !editingOwner && (
+              {!editingOwner && (
                 <div className="flex items-center gap-2 mb-2">
                   <div className="flex-1 h-px bg-gray-200" />
                   <span className="text-xs text-gray-400">or choose manually</span>
@@ -627,54 +608,9 @@ function isExternalCert(cert: Cert): boolean {
   return !cert.ica || cert.ica.id === 'EXTERNAL_CA';
 }
 
-type RecommendationScore = 'High' | 'Medium' | 'Low';
-
-function getRecommendation(cert: Cert, users: User[], localBus: Record<string, { id: string; name: string }>): { user: User; score: RecommendationScore } | null {
-  if (!users.length) return null;
-
-  // Deterministic index from serial so same cert always gets same recommendation
-  const hash = cert.serial_number.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  const buName = (localBus[cert.serial_number] ?? cert.business_unit)?.name ?? '';
-
-  // BU names are long-form ("DevOps & Infrastructure") while user departments are short ("DevOps")
-  // so match if the BU name contains the department name as a substring
-  const deptUsers = users.filter(u => buName && buName.toLowerCase().includes(u.department.toLowerCase()));
-  const adjacentDepts: Record<string, string[]> = {
-    Engineering: ['DevOps'],
-    DevOps: ['Engineering'],
-    Finance: ['Legal'],
-    Legal: ['Finance'],
-    Marketing: ['Finance'],
-  };
-  const buKey = Object.keys(adjacentDepts).find(k => buName.toLowerCase().includes(k.toLowerCase())) ?? '';
-  const adjacentUsers = users.filter(u => (adjacentDepts[buKey] ?? []).includes(u.department));
-
-  let score: RecommendationScore;
-  let pool: User[];
-  if (deptUsers.length) {
-    pool = deptUsers;
-    score = 'High';
-  } else if (adjacentUsers.length) {
-    pool = adjacentUsers;
-    score = 'Medium';
-  } else {
-    pool = users;
-    score = 'Low';
-  }
-
-  return { user: pool[hash % pool.length], score };
-}
-
-function scoreChipClass(score: RecommendationScore) {
-  if (score === 'High') return 'text-green-700 bg-green-50 ring-green-200';
-  if (score === 'Medium') return 'text-amber-700 bg-amber-50 ring-amber-200';
-  return 'text-gray-500 bg-gray-100 ring-gray-200';
-}
-
-function AssignOwnerPanel({ cert, users, localBus, onClose, onSuccess }: {
+function AssignOwnerPanel({ cert, users, onClose, onSuccess }: {
   cert: Cert;
   users: User[];
-  localBus: Record<string, { id: string; name: string }>;
   onClose: () => void;
   onSuccess: (serial: string, ownerName: string) => void;
 }) {
@@ -694,7 +630,6 @@ function AssignOwnerPanel({ cert, users, localBus, onClose, onSuccess }: {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const recommendation = getRecommendation(cert, users, localBus);
 
   const filtered = users.filter(u =>
     !query || u.name.toLowerCase().includes(query.toLowerCase()) || u.email.toLowerCase().includes(query.toLowerCase())
@@ -749,29 +684,9 @@ function AssignOwnerPanel({ cert, users, localBus, onClose, onSuccess }: {
         <p className="text-sm font-medium text-gray-900">{cert.common_name ?? cert.seat?.seat_id ?? '—'}</p>
       </div>
 
-      {/* Recommendation */}
-      {recommendation && (
-        <div className="mb-5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Recommended Owner</p>
-          <div className="border border-gray-200 rounded-lg px-4 py-3 bg-white">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-sm font-medium text-gray-900">{recommendation.user.name}</p>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${scoreChipClass(recommendation.score)}`}>
-                {recommendation.score} confidence
-              </span>
-            </div>
-            <p className="text-xs text-gray-400 mb-1">{recommendation.user.email}</p>
-            <p className="text-xs text-gray-400 mb-3">{recommendation.user.department}</p>
-            <button
-              onClick={() => submit(recommendation.user)}
-              disabled={loading}
-              className="w-full px-3 py-1.5 text-sm border border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50 disabled:opacity-40 transition-colors"
-            >
-              Accept Recommendation
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="mb-5">
+        <OwnerRecommendation serial={cert.serial_number} users={users} busy={loading} onAccept={submit} />
+      </div>
 
       {/* Divider */}
       <div className="flex items-center gap-3 mb-4">
@@ -1499,7 +1414,6 @@ export function InventoryPage() {
         <AssignOwnerPanel
           cert={selected}
           users={users}
-          localBus={localBus}
           onClose={() => setSelected(null)}
           onSuccess={handleAssignSuccess}
         />

@@ -323,3 +323,6 @@ export function previewRule(id: number, edit: RuleEdit): Promise<RulePreview> {
     body: JSON.stringify(edit),
   }).then(r => jsonOrThrow(r));
 }
+
+export const fetchRecommendation = (serial: string): Promise<Recommendation> =>
+  fetch(`/api/certificates/${encodeURIComponent(serial)}/recommendation`).then(r => jsonOrThrow(r));

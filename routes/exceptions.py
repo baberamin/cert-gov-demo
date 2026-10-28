@@ -200,6 +200,16 @@ def _active_with_facts(certs, owner_map):
             yield cert, _facts(cert, owner_map)
 
 
+def _bu_name(cert, bu_map):
+    # DigiCert files app-issued certs under the profile's BU; the local overlay holds the intended one.
+    return bu_map.get(cert['serial_number']) or (cert.get('business_unit') or {}).get('name') or ''
+
+
+def _peer_info(active, bu_map):
+    """serial -> (business unit, owner) for every active cert; the evidence base for recommendations."""
+    return {c['serial_number']: (_bu_name(c, bu_map), f['owner']) for c, f in active}
+
+
 def _refresh():
     certs = fetch_inventory()
     with _refresh_lock, _db() as conn:
@@ -211,10 +221,7 @@ def _refresh():
         existing = {r['serial_number']: r for r in conn.execute('SELECT * FROM decisions').fetchall()}
         now = datetime.now(timezone.utc).isoformat()
         active = list(_active_with_facts(certs, owner_map))
-        # DigiCert files app-issued certs under the profile's BU; the local overlay holds the intended one.
-        bu_of = {c['serial_number']: bu_map.get(c['serial_number']) or (c.get('business_unit') or {}).get('name') or ''
-                 for c, _ in active}
-        info = {c['serial_number']: (bu_of[c['serial_number']], f['owner']) for c, f in active}
+        info = _peer_info(active, bu_map)
         seen = set()
         for cert, facts in active:
             serial = cert['serial_number']
@@ -227,8 +234,9 @@ def _refresh():
             seat = cert.get('seat') or {}
             rec = None
             if res['outcome'] == 'needs_review':
-                rec = json.dumps(recommend(cert, bu_of[serial], peer_counter(serial, bu_of[serial], info), USERS))
-            row = (cert_name(cert), seat.get('seat_id') or serial, facts['owner'], bu_of[serial],
+                bu = info[serial][0]
+                rec = json.dumps(recommend(cert, bu, peer_counter(serial, bu, info), USERS))
+            row = (cert_name(cert), seat.get('seat_id') or serial, facts['owner'], info[serial][0],
                    (cert.get('valid_to') or '')[:10], facts['days'],
                    res['outcome'], rule['id'] if rule else None, rule['name'] if rule else None,
                    _snapshot(rule), res['reason'], cert.get('ca_vendor') or '')
@@ -274,6 +282,23 @@ def list_exceptions():
 def list_auto_handled():
     _refresh()
     return jsonify(_rows('auto_approved'))
+
+
+@exceptions_bp.route('/api/certificates/<serial>/recommendation')
+def cert_recommendation(serial):
+    """Owner recommendation for any cert, from the same evidence the exception queue uses."""
+    certs = fetch_inventory()
+    cert = next((c for c in certs if c.get('serial_number') == serial), None)
+    if not cert:
+        return jsonify({'error': 'not found'}), 404
+    with _db() as conn:
+        owner_map = {r['serial_number']: r['owner_name']
+                     for r in conn.execute('SELECT serial_number, owner_name FROM owner_assignments').fetchall()}
+        bu_map = {r['serial_number']: r['bu_name']
+                  for r in conn.execute('SELECT serial_number, bu_name FROM bu_assignments').fetchall()}
+    info = _peer_info(list(_active_with_facts(certs, owner_map)), bu_map)
+    bu = _bu_name(cert, bu_map)
+    return jsonify(recommend(cert, bu, peer_counter(serial, bu, info), USERS))
 
 
 @exceptions_bp.route('/api/exceptions/<serial>/decide', methods=['POST'])
