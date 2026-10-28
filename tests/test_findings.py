@@ -139,3 +139,10 @@ def test_patch_finding_status_invalid_value(client):
     resp = client.patch('/api/findings/EXPIRING-001:expiring_soon:critical/status',
                         json={'status': 'banana'})
     assert resp.status_code == 400
+
+
+@rsps.activate
+def test_overview_counts_findings_without_visiting_the_findings_page_first(client):
+    _mock_cert_search([CERT_EXPIRING, CERT_WEAK_KEY])
+    data = client.get('/api/overview').get_json()
+    assert data['findings_critical'] == 2  # expiring_soon + weak_key, both critical

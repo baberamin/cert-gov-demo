@@ -135,9 +135,8 @@ def _compute_findings(certs, owner_map):
     return findings
 
 
-@findings_bp.route('/api/findings')
-def list_findings():
-    certs = fetch_inventory()
+def _sync_findings(certs):
+    """Recompute findings from certs, upsert them (keeping reviewer status), and return all rows."""
 
     with _db() as conn:
         owner_map = {r['serial_number']: r['owner_name']
@@ -169,12 +168,18 @@ def list_findings():
         rows = [dict(r) for r in conn.execute('SELECT * FROM findings').fetchall()]
 
     rows.sort(key=lambda x: (SEVERITY_ORDER.get(x['severity'], 99), x['created_at']))
-    return jsonify(rows)
+    return rows
+
+
+@findings_bp.route('/api/findings')
+def list_findings():
+    return jsonify(_sync_findings(fetch_inventory()))
 
 
 @findings_bp.route('/api/overview')
 def get_overview():
     certs = fetch_inventory()
+    _sync_findings(certs)
 
     with _db() as conn:
         owner_map = {r['serial_number']: r['owner_name']
