@@ -20,6 +20,10 @@
 
 > "This is that answer. These are the certificates the rules could not approve, so a person has to decide."
 
+The page shows the whole tenant, so it's long. Use the **CA filter** (top right) and choose **Saviynt** to narrow it to certs issued by our own CA.
+
+> "The tenant has self-signed certs too, and I'll come back to those. First, the certs we issued ourselves."
+
 Point at one row's **Why it needs you** column.
 
 > "Every row says why it's here and which rule sent it. For example, no owner, or it expires too soon to auto-approve."
@@ -33,6 +37,12 @@ Point at a Medium or Low row (for example `deploy-hub.acme.com`).
 > "Where the evidence is thinner we say so. Here we can name the team but not a person, so it's Medium, and we don't guess a name."
 
 > "And for a self-signed cert, or anything not issued by our CA, there is no issuer-side evidence, so we don't recommend at all. A confident wrong guess is worse than none."
+
+Switch the CA filter to **Dummy Certs Lab** and open **Evidence** on any row.
+
+> "These are the self-signed lab certs. The system says it has no issuer evidence, so it won't guess. That one goes to a person."
+
+Switch the filter back to **Saviynt** for the next step.
 
 Click **Accept suggestion** on one row, or **Approve** on another (**do not use Revoke on a shared tenant**).
 
@@ -66,7 +76,7 @@ Click **Save rule**, show the counts move, then set it back to 30 and save. Or c
 
 ## Notes for the presenter
 
-- **Demo data.** The recommendation examples come from certs issued by `scripts/seed_demo_certs.py`. If you accept suggestions during a run, re-run that script to restore a fresh set (it skips names that already exist, so revoke the old ones first or change the names). The live tenant currently has no self-signed certs, so "no recommendation" is something you describe rather than show.
+- **Demo data.** The recommendation examples come from certs issued by `scripts/seed_demo_certs.py`. If you accept suggestions during a run, re-run that script to restore a fresh set (it skips names that already exist, so revoke the old ones first or change the names). The self-signed lab certs are real tenant data (CA "Dummy Certs Lab"), so the "no recommendation" contrast is live.
 - **Auto-approve only.** The system never revokes or reassigns on its own. Only people do.
 - **Campaigns are parked, not deleted.** If asked about periodic reviews: the earlier campaign workflow is still in the code at `/campaigns` and can go back in the menu if a customer wants scheduled reviews. See the README.
 - **If the Needs Attention list is long,** that reflects the tenant's real ownership gap. Say so: "most of these are unowned, which is exactly the problem this surfaces."
