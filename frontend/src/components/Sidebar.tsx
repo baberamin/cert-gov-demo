@@ -3,8 +3,9 @@ import { NavLink } from 'react-router-dom';
 const navItems = [
   { label: 'Overview', to: '/' },
   { label: 'Certificate Inventory', to: '/inventory' },
-  { label: 'Campaigns', to: '/campaigns' },
+  { label: 'Exceptions', to: '/exceptions' },
   { label: 'Findings', to: '/findings' },
+  // Campaigns nav link is parked, not removed: see "Parked: access review campaigns" in README.md.
 ];
 
 export function Sidebar() {

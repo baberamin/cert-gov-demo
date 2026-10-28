@@ -9,7 +9,7 @@ A proof-of-concept integration between **Saviynt Zuma** and **DigiCert Trust Lif
 | **Certificate Inventory** | Browse, filter, revoke, and reissue certificates from your DigiCert tenant |
 | **Risk & Findings** | Automatically detects expiring, unowned, weak-key, long-lived, and quantum-unsafe certificates |
 | **Overview Dashboard** | Live KPIs — active cert count, ownership coverage, expiry windows, open findings by severity |
-| **Access Review Campaigns** | Create point-in-time snapshots of active certs; reviewers approve, revoke, or reassign each one |
+| **Exceptions** | Rules auto-approve healthy certs; only exceptions reach a person. Shows what was auto-handled and why, and lets you edit the rules with an impact preview |
 
 ## Prerequisites
 
@@ -36,6 +36,15 @@ make run
 ```
 
 Then open **http://127.0.0.1:5000** in your browser.
+
+## Parked: access review campaigns
+
+The Exceptions page replaced Campaigns in the sidebar. The campaigns feature still exists and works; it is only unlinked.
+
+- **Backend:** `routes/campaigns.py` and `tests/test_campaigns.py`, still registered in `app.py`.
+- **Frontend:** `frontend/src/pages/CampaignsPage.tsx`, still routed at `/campaigns` in `frontend/src/App.tsx`. It is reachable by URL.
+
+To bring it back, add `{ label: 'Campaigns', to: '/campaigns' }` to `navItems` in `frontend/src/components/Sidebar.tsx`, then run `make setup`. To remove it for good, delete those files and their lines in `app.py` and `App.tsx`.
 
 ## Running tests
 

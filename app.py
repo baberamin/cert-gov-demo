@@ -14,6 +14,7 @@ def create_app():
     from routes.users import users_bp
     from routes.findings import findings_bp, init_findings_db
     from routes.campaigns import campaigns_bp, init_campaigns_db
+    from routes.exceptions import exceptions_bp, init_exceptions_db
 
     app.register_blueprint(certificates_bp)
     app.register_blueprint(ownership_bp)
@@ -22,9 +23,11 @@ def create_app():
     app.register_blueprint(users_bp)
     app.register_blueprint(findings_bp)
     app.register_blueprint(campaigns_bp)
+    app.register_blueprint(exceptions_bp)
     init_db()
     init_findings_db()
     init_campaigns_db()
+    init_exceptions_db()
 
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')

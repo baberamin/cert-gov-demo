@@ -237,3 +237,80 @@ export async function decideCampaignItem(
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export interface ExceptionItem {
+  serial_number: string;
+  common_name: string | null;
+  seat_id: string | null;
+  owner: string;
+  bu_name: string;
+  valid_to: string;
+  expires_in_days: number;
+  outcome: 'needs_review' | 'auto_approved' | 'approved' | 'revoked' | 'reassigned';
+  rule_id: number | null;
+  rule_name: string | null;
+  reason: string;
+  decided_by: string;
+  decided_at: string;
+}
+
+export interface Rule {
+  id: number;
+  name: string;
+  template: 'unowned' | 'policy_violation' | 'healthy_owned';
+  outcome: 'escalate' | 'auto_approve';
+  params: Record<string, number>;
+  enabled: boolean;
+  priority: number;
+  description: string;
+  param_labels: Record<string, string>;
+}
+
+export interface RuleEdit {
+  params?: Record<string, number>;
+  enabled?: boolean;
+}
+
+export interface RulePreview {
+  to_queue: number;
+  to_auto_approved: number;
+  samples: { serial_number: string; common_name: string | null; from: string; to: string; reason: string }[];
+}
+
+async function jsonOrThrow<T>(res: Response): Promise<T> {
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export const fetchExceptions = (): Promise<ExceptionItem[]> => fetch('/api/exceptions').then(r => jsonOrThrow(r));
+export const fetchAutoHandled = (): Promise<ExceptionItem[]> => fetch('/api/exceptions/auto-handled').then(r => jsonOrThrow(r));
+export const fetchRules = (): Promise<Rule[]> => fetch('/api/rules').then(r => jsonOrThrow(r));
+
+export function decideException(
+  serial: string,
+  decision: 'approved' | 'revoked' | 'reassigned',
+  new_owner?: string,
+  new_owner_email?: string,
+): Promise<ExceptionItem> {
+  return fetch(`/api/exceptions/${encodeURIComponent(serial)}/decide`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision, new_owner, new_owner_email }),
+  }).then(r => jsonOrThrow(r));
+}
+
+export function updateRule(id: number, edit: RuleEdit): Promise<Rule> {
+  return fetch(`/api/rules/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(edit),
+  }).then(r => jsonOrThrow(r));
+}
+
+export function previewRule(id: number, edit: RuleEdit): Promise<RulePreview> {
+  return fetch(`/api/rules/${id}/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(edit),
+  }).then(r => jsonOrThrow(r));
+}
