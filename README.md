@@ -1,15 +1,16 @@
 # cert-gov-demo
 
-A proof-of-concept integration between **Saviynt Zuma** and **DigiCert Trust Lifecycle Manager (MPKI)** that demonstrates live certificate governance — risk posture, security findings, and access review campaigns.
+A proof-of-concept integration between **Saviynt Zuma** and **DigiCert Trust Lifecycle Manager (MPKI)**. It shows certificate governance by exception: certificates are approved automatically by rule, and only the exceptions reach a person, with the reason and a recommended owner backed by evidence.
 
 ## What it does
 
 | Feature | Description |
 |---|---|
-| **Certificate Inventory** | Browse, filter, revoke, and reissue certificates from your DigiCert tenant |
-| **Risk & Findings** | Automatically detects expiring, unowned, weak-key, long-lived, and quantum-unsafe certificates |
-| **Overview Dashboard** | Live KPIs — active cert count, ownership coverage, expiry windows, open findings by severity |
-| **Exceptions** | Rules auto-approve healthy certs; only exceptions reach a person. Shows what was auto-handled and why, and lets you edit the rules with an impact preview |
+| **Certificate Inventory** | The complete tenant inventory. Browse, filter (status, BU, CA, owner), issue, revoke, reissue, and assign owners |
+| **Overview** | Live KPIs: active certs, ownership coverage, expiry windows, open findings by severity |
+| **Findings** | Detects expiring, unowned, weak-key, long-lived, and quantum-unsafe certificates; reviewer status is saved |
+| **Exceptions** | Rules auto-approve healthy certs; everything else lands in a queue with the rule and reason. Shows what was auto-handled and why, and lets you edit the rules with an impact preview. Filter by CA |
+| **Owner recommendation** | For certs issued by your own CA, suggests an owner from the business unit, the name, and who owns the neighboring certs, and shows the evidence. Self-signed and external certs get no recommendation |
 
 ## Prerequisites
 
@@ -35,16 +36,27 @@ make setup
 make run
 ```
 
-Then open **http://127.0.0.1:5001** in your browser.
+Then open **http://127.0.0.1:5001** in your browser. (Port 5001 because macOS AirPlay Receiver holds 5000.)
 
-## Resetting the demo
+## Running the demo
+
+The script is [cert-gov demo talk track.md](cert-gov%20demo%20talk%20track.md). Before each run:
 
 ```bash
-make demo-reset ARGS=--dry-run   # show what would change
+make demo-reset ARGS=--dry-run   # preview what a reset would change
 make demo-reset                  # reset
 ```
 
-This makes sure the demo certificates exist (issuing any that are missing from the tenant CA), clears Exceptions decisions and finding statuses, restores the default rules, and resets the owners of the demo certificates. It never writes ownership to DigiCert, never revokes anything, and leaves other certificates' owners alone. Run it before each demo.
+A reset makes sure the demo certificates exist (issuing any that are missing from the tenant CA), clears Exceptions decisions and finding statuses, restores the default rules, and resets the owners of the demo certificates. It never writes ownership to DigiCert, never revokes anything, and leaves other certificates' owners alone. If the app is already running, give it about 30 seconds to pick up new certificates.
+
+## Design choices
+
+- **Ownership lives in Saviynt, not DigiCert.** Owners are stored locally and never written to the DigiCert seat. That is the layer Zuma adds on top of the CA.
+- **The system only auto-approves.** It never revokes or reassigns on its own; only people do.
+- **No guessing.** A certificate not issued by your CA has no issuer-side evidence, so no owner is suggested.
+- **The inventory is complete.** Every page of the tenant is fetched (in parallel, cached for 30 seconds).
+
+More detail, DigiCert API findings, and known limitations are in [STATUS.md](STATUS.md).
 
 ## Parked: access review campaigns
 
@@ -60,6 +72,8 @@ To bring it back, add `{ label: 'Campaigns', to: '/campaigns' }` to `navItems` i
 ```bash
 make test
 ```
+
+Seven older tests in `test_certificates.py`, `test_ownership.py`, and `test_remediation.py` currently fail. They predate later changes and assert old response shapes; all newer tests pass. Details are in STATUS.md.
 
 ## Tech stack
 

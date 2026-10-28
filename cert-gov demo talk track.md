@@ -1,22 +1,24 @@
-# Demo Talk Track: Certificate Governance by Exception (about 4 min)
+# Demo Talk Track: Certificate Governance by Exception (about 5-6 min)
 
-**Before you start:** the app must be running and the Exceptions page loaded once (the first load takes about 5 seconds while it pulls from DigiCert). Read counts off the screen rather than quoting numbers from this script, because they follow the live tenant. The app runs on port 5001 because macOS AirPlay Receiver holds port 5000.
+**Before you start:** run `make demo-reset` (if the app is already running, give it about 30 seconds), then `make run` and open http://127.0.0.1:5001. Load the Exceptions page once before you begin; the first load takes about 4 seconds while it pulls from DigiCert. Read counts off the screen rather than quoting numbers from this script, because they follow the live tenant.
 
 ---
 
-## 0:00 Setup
+## Setup (about 20 sec)
 
 > "Certificate lifetimes keep shrinking, and agent workloads need certs too. Reviewing every cert on a yearly campaign doesn't scale. So we flipped it: the system certifies by default, and people only see the exceptions. Everything here is live from our DigiCert tenant."
 
-## 0:20 Overview (`/`)
+## Overview (`/`, about 30 sec)
 
 > "Live posture: active certificates, how many have an owner, what expires soon, open findings by severity. This is the volume problem. No team can review all of this by hand."
 
-## 0:50 Findings (`/findings`)
+Talk about active certificates, ownership and expiry. Don't lean on the open-findings total: findings include expired certs, so it runs large.
+
+## Findings (`/findings`, about 30 sec)
 
 > "Detection is automatic. Five rules run on every cert: expiring, unowned, weak key, long-lived, quantum-unsafe. Findings tell us what's wrong. The next question is who has to do something about it."
 
-## 1:20 Exceptions: Needs Attention (`/exceptions`)
+## Exceptions: Needs Attention (`/exceptions`, about 2.5 min)
 
 > "This is that answer. These are the certificates the rules could not approve, so a person has to decide."
 
@@ -48,13 +50,13 @@ Click **Accept suggestion** on one row, or **Approve** on another (**do not use 
 
 > "One click, and the owner is recorded in Zuma. We don't write it into DigiCert. Ownership is the layer we add on top of the CA, and it's why people work from this view instead of the CA's console. The cert leaves the queue."
 
-## 2:15 Exceptions: Auto-handled
+## Exceptions: Auto-handled (about 30 sec)
 
 Click the **Auto-handled** tab.
 
 > "This is everything the system approved without bothering anyone, and this is the audit trail. Each cert shows the rule that approved it and the reason in plain language: owner present, key size, validity, days to expiry."
 
-## 2:45 Rules and impact preview
+## Rules and impact preview (about 1 min)
 
 Click a rule name chip (for example **Healthy and owned**). The editor opens.
 
@@ -68,7 +70,7 @@ Click **Save rule**, show the counts move, then set it back to 30 and save. Or c
 
 > "Rules run top to bottom and the first match wins. Anything no rule approves goes to a person, so the safe default is human review."
 
-## 3:35 Close
+## Close (about 30 sec)
 
 > "So: automatic detection, rules that approve the routine and escalate the exceptions, a plain-language audit trail for everything the system decided, and rules a person can edit with the impact visible first. Certification stays continuous, and the human effort goes only where it matters."
 
@@ -77,6 +79,7 @@ Click **Save rule**, show the counts move, then set it back to 30 and save. Or c
 ## Notes for the presenter
 
 - **Demo data.** Run `make demo-reset` before each demo (`make demo-reset ARGS=--dry-run` previews it). It restores the demo certs' owners, clears decisions, and puts the rules back to defaults, so the queue starts the same every time. Accepting suggestions only changes our own records, so a reset undoes it completely. The self-signed lab certs are real tenant data (CA "Dummy Certs Lab"), so the "no recommendation" contrast is live.
+- **Same recommendation elsewhere.** Inventory → open a cert → Assign Owner shows the same suggestion and evidence as the queue, if someone asks.
 - **Auto-approve only.** The system never revokes or reassigns on its own. Only people do.
 - **Campaigns are parked, not deleted.** If asked about periodic reviews: the earlier campaign workflow is still in the code at `/campaigns` and can go back in the menu if a customer wants scheduled reviews. See the README.
 - **If the Needs Attention list is long,** that reflects the tenant's real ownership gap. Say so: "most of these are unowned, which is exactly the problem this surfaces."
