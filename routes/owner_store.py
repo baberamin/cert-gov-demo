@@ -2,7 +2,6 @@ import sqlite3
 import os
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
-from routes.ownership import update_seat_owner
 
 owner_store_bp = Blueprint('owner_store', __name__)
 
@@ -47,8 +46,6 @@ def save_bu_assignment(serial: str, bu_id: str, bu_name: str) -> None:
 def assign_owner(serial):
     body = request.get_json() or {}
     owner_name = (body.get('owner_name') or '').strip()
-    owner_email = (body.get('owner_email') or '').strip()
-    seat_id = (body.get('seat_id') or '').strip()
     if not owner_name:
         return jsonify({'error': 'owner_name is required'}), 400
 
@@ -58,10 +55,6 @@ def assign_owner(serial):
             (serial, owner_name, datetime.now(timezone.utc).isoformat()),
         )
         conn.commit()
-
-    # Write owner back to DigiCert seat so it's recorded in the CA, not just locally
-    if seat_id:
-        update_seat_owner(seat_id, seat_name=owner_name, email=owner_email)
 
     return jsonify({'serial_number': serial, 'owner_name': owner_name})
 

@@ -735,11 +735,11 @@ function AssignOwnerPanel({ cert, users, localBus, onClose, onSuccess }: {
       {/* Origin notice */}
       {external ? (
         <div className="bg-gray-50 border border-gray-200 text-gray-600 text-xs px-3 py-2 rounded-lg mb-4">
-          External / discovered cert — ownership tracked locally only.
+          External / discovered cert — ownership is recorded in Saviynt Zuma.
         </div>
       ) : (
         <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs px-3 py-2 rounded-lg mb-4">
-          CA-issued cert — local save now, DigiCert write-back pending API confirmation.
+          CA-issued cert — ownership is recorded in Saviynt Zuma and is not written to DigiCert.
         </div>
       )}
 

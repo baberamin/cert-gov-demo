@@ -126,3 +126,15 @@ def test_create_campaign_missing_name_returns_400(client):
 def test_get_nonexistent_campaign_returns_404(client):
     resp = client.get('/api/campaigns/does-not-exist')
     assert resp.status_code == 404
+
+
+@rsps.activate
+def test_decide_reassign_never_writes_to_digicert(client):
+    import digicert_client as dc
+    _mock_cert_search([CERT_A])
+    campaign_id = client.post('/api/campaigns', json={'name': 'Q4'}).get_json()['id']
+    before = dc.writes
+    resp = client.post(f'/api/campaigns/{campaign_id}/items/CERT-AAA/decide',
+                       json={'decision': 'reassigned', 'new_owner': 'Carol'})
+    assert resp.status_code == 200
+    assert dc.writes == before

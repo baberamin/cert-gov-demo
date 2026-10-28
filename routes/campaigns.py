@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 import digicert_client as dc
 from routes.certificates import fetch_inventory
-from routes.ownership import update_seat_owner
 
 campaigns_bp = Blueprint('campaigns', __name__)
 
@@ -172,8 +171,6 @@ def decide_item(campaign_id, serial):
                 (serial, new_owner, now),
             )
             conn.commit()
-        if item['seat_id']:
-            update_seat_owner(item['seat_id'], seat_name=new_owner, email=new_owner_email or '')
 
     now = datetime.now(timezone.utc).isoformat()
     with _db() as conn:

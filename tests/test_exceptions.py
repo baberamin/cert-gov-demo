@@ -322,3 +322,14 @@ def test_items_carry_ca_vendor_for_filtering(client):
     assert queue(client)['T1']['ca_vendor'] == 'Saviynt'
     assert queue(client)['SELF-1']['ca_vendor'] == 'Dummy Certs Lab'
     assert handled(client)['P1']['ca_vendor'] == 'Saviynt'
+
+
+@rsps.activate
+def test_reassigning_never_writes_to_digicert(client):
+    import digicert_client as dc
+    mock_certs([UNOWNED])
+    queue(client)
+    before = dc.writes
+    resp = client.post('/api/exceptions/UNOWNED-2/decide', json={'decision': 'reassigned', 'new_owner': 'Carol'})
+    assert resp.status_code == 200
+    assert dc.writes == before

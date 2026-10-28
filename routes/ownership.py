@@ -87,21 +87,6 @@ def ensure_seat_exists(seat_id: str, bu_id: str,
         pass
 
 
-def update_seat_owner(seat_id: str, seat_name: str = '', email: str = '') -> None:
-    """Write owner info back to a DigiCert seat. Best-effort — never raises."""
-    if not seat_id:
-        return
-    update = {'seat_type': {'id': 'SERVER_SEAT'}}
-    if seat_name:
-        update['seat_name'] = seat_name
-    if email:
-        update['email'] = email
-    try:
-        dc.put(f'/mpki/api/v1/seat/{seat_id}', update)
-    except Exception:
-        pass
-
-
 @ownership_bp.route('/api/business-units')
 def list_business_units():
     return jsonify(get_business_units())

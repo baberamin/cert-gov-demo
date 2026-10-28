@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 import digicert_client as dc
 from routes.certificates import fetch_inventory
-from routes.ownership import update_seat_owner
 from routes.recommendations import recommend, peer_counter, cert_name
 from routes.users import USERS
 
@@ -53,6 +52,14 @@ def _db():
     return conn
 
 
+def seed_default_rules(conn):
+    for name, template, outcome, params, priority in DEFAULT_RULES:
+        conn.execute(
+            'INSERT INTO rules (name, template, outcome, params, enabled, priority) VALUES (?, ?, ?, ?, 1, ?)',
+            (name, template, outcome, json.dumps(params), priority),
+        )
+
+
 def init_exceptions_db():
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('''
@@ -93,11 +100,7 @@ def init_exceptions_db():
             if column not in have:
                 conn.execute(f'ALTER TABLE decisions ADD COLUMN {column} TEXT')
         if conn.execute('SELECT COUNT(*) FROM rules').fetchone()[0] == 0:
-            for name, template, outcome, params, priority in DEFAULT_RULES:
-                conn.execute(
-                    'INSERT INTO rules (name, template, outcome, params, enabled, priority) VALUES (?, ?, ?, ?, 1, ?)',
-                    (name, template, outcome, json.dumps(params), priority),
-                )
+            seed_default_rules(conn)
         conn.commit()
 
 
@@ -299,7 +302,6 @@ def decide_exception(serial):
                 (serial, new_owner, now),
             )
             conn.commit()
-        update_seat_owner(item['seat_id'], seat_name=new_owner, email=new_owner_email or '')
     elif decision == 'revoked':
         dc.put(f'/mpki/api/v1/certificate/{serial}/revoke', {'revocation_reason': 'SUPERSEDED'})
 

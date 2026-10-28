@@ -65,7 +65,7 @@ cd frontend && npm run build   # outputs to ../static/
 - **Reissue endpoint** is `POST /mpki/api/v1/certificate/{serial}/renew` (not re-posting to `/certificate`).
 - **Revoke** is `PUT /mpki/api/v1/certificate/{serial}/revoke` with `{revocation_reason: "..."}`.
 - **Cancel** — no cancel endpoint exists for this profile. `DELETE /revoke` means *resume suspended*, not cancel. Backend returns 501.
-- **`seat.user_name` does not exist** in DigiCert responses — the field is `seat_name`. Owner always comes from local SQLite or DigiCert seat write-back.
+- **`seat.user_name` does not exist** in DigiCert responses — the field is `seat_name`. Ownership is kept in the local SQLite store by design (Saviynt's value on top of DigiCert); it is never written to DigiCert.
 - **POST /business-unit requires `account.id`** — fetched from the Engineering BU at sync time.
 
 ### Seat = Owner in DigiCert's model
@@ -96,7 +96,7 @@ digicert-poc/
 │   │                       # + ensure_seat_exists(), update_seat_owner() helpers
 │   ├── remediation.py      # /api/certificates/<serial>/revoke|reissue|cancel
 │   ├── owner_store.py      # /api/certificates/<serial>/assign-owner, /api/owner-assignments
-│   │                       # writes back to DigiCert seat API on owner assignment
+│   │                       # owner is stored locally only; nothing is written to DigiCert
 │   └── users.py            # /api/users (50 mock users across 5 depts, Marvel/Disney)
 └── frontend/
     ├── src/
@@ -146,7 +146,7 @@ digicert-poc/
 ### Ownership Assignment
 - "Assign Owner" panel with AI-style recommendation (matches by BU → department, substring match handles "DevOps & Infrastructure" → "DevOps" users)
 - Confidence scoring: High (exact BU dept match), Medium (adjacent dept), Low (all users)
-- Owner saved to local SQLite **and** written back to DigiCert via `PUT /seat/{seat_id}` with `seat_name` + `email`
+- Owner saved to the local SQLite store only, by design. Nothing is written to the DigiCert seat
 - Owner visible immediately in inventory
 
 ### Remediation
