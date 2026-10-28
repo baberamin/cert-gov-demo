@@ -238,6 +238,13 @@ export async function decideCampaignItem(
   return res.json();
 }
 
+export interface Recommendation {
+  confidence: 'High' | 'Medium' | 'Low' | 'None';
+  owner: { name: string; email: string; department: string } | null;
+  team: string | null;
+  evidence: string[];
+}
+
 export interface ExceptionItem {
   serial_number: string;
   common_name: string | null;
@@ -252,6 +259,7 @@ export interface ExceptionItem {
   reason: string;
   decided_by: string;
   decided_at: string;
+  recommendation: Recommendation | null;
 }
 
 export interface Rule {

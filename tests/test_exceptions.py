@@ -241,3 +241,75 @@ def test_certs_pulled_once_within_ttl(client, monkeypatch):
     queue(client)
     searches = [c for c in rsps.calls if 'certificate-search' in c.request.url]
     assert len(searches) == 2  # one unfiltered + one profile-filtered pull, shared by both views
+
+
+def tenant(serial, bu, owner='', cn=None, **over):
+    return cert(serial, common_name=cn or f'{serial.lower()}.acme.com',
+                profile={'id': 'p1', 'name': 'Private Server'},
+                seat={'seat_id': f'{serial}-seat', 'seat_name': owner},
+                business_unit={'id': 'bu', 'name': bu}, **over)
+
+
+@rsps.activate
+def test_queue_item_carries_recommendation_with_evidence(client):
+    mock_certs([
+        tenant('P1', 'Finance & Accounting', owner='Pepper Potts'),
+        tenant('P2', 'Finance & Accounting', owner='Pepper Potts'),
+        tenant('T1', 'Finance & Accounting', cn='ledger.acme.com'),
+    ])
+    rec = queue(client)['T1']['recommendation']
+    assert rec['confidence'] == 'High'
+    assert rec['owner']['name'] == 'Pepper Potts'
+    assert any('owns 2 of 2' in e for e in rec['evidence'])
+
+
+@rsps.activate
+def test_self_signed_item_says_no_recommendation(client):
+    mock_certs([UNOWNED])  # no profile: self-signed / external
+    rec = queue(client)['UNOWNED-2']['recommendation']
+    assert rec['confidence'] == 'None' and rec['owner'] is None
+
+
+@rsps.activate
+def test_queue_lists_certs_with_recommendations_first(client):
+    mock_certs([
+        cert('AAA-SELF', seat={'seat_id': 's', 'seat_name': ''}, expires_in_days=5),
+        tenant('P1', 'Finance & Accounting', owner='Pepper Potts'),
+        tenant('T1', 'Finance & Accounting', cn='ledger.acme.com', expires_in_days=90),
+    ])
+    serials = [i['serial_number'] for i in client.get('/api/exceptions').get_json()]
+    assert serials.index('T1') < serials.index('AAA-SELF')
+
+
+@rsps.activate
+def test_local_bu_overlay_is_used_for_bu_and_recommendation(client):
+    import routes.exceptions as ex
+    import sqlite3
+    with sqlite3.connect(ex.DB_PATH) as conn:
+        conn.execute("INSERT INTO bu_assignments (serial_number, bu_id, bu_name) VALUES ('T1', 'x', 'Marketing & Growth')")
+    mock_certs([tenant('T1', 'Engineering', cn='edge.acme.com')])  # DigiCert says Engineering
+    item = queue(client)['T1']
+    assert item['bu_name'] == 'Marketing & Growth'
+    assert item['recommendation']['team'] == 'Marketing'
+
+
+@rsps.activate
+def test_assigning_an_owner_improves_peers_evidence(client):
+    mock_certs([tenant('T1', 'Finance & Accounting', cn='ledger.acme.com'),
+                tenant('T2', 'Finance & Accounting', cn='billing.acme.com')])
+    assert queue(client)['T1']['recommendation']['owner'] is None
+    client.post('/api/exceptions/T2/decide', json={'decision': 'reassigned', 'new_owner': 'Pepper Potts'})
+    assert queue(client)['T1']['recommendation']['owner']['name'] == 'Pepper Potts'
+
+
+def test_init_adds_recommendation_column_to_older_database(tmp_path, monkeypatch):
+    import sqlite3
+    import routes.exceptions as ex
+    db = str(tmp_path / 'old.db')
+    monkeypatch.setattr(ex, 'DB_PATH', db)
+    with sqlite3.connect(db) as conn:
+        conn.execute('CREATE TABLE decisions (serial_number TEXT PRIMARY KEY, outcome TEXT NOT NULL, '
+                     'decided_by TEXT NOT NULL, decided_at TEXT NOT NULL)')
+    ex.init_exceptions_db()
+    with sqlite3.connect(db) as conn:
+        assert 'recommendation' in {r[1] for r in conn.execute('PRAGMA table_info(decisions)')}

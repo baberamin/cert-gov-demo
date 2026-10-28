@@ -8,6 +8,8 @@ from flask import Blueprint, jsonify, request
 import digicert_client as dc
 from routes.findings import _fetch_certs_all
 from routes.ownership import update_seat_owner
+from routes.recommendations import recommend, peer_counter, cert_name
+from routes.users import USERS
 
 exceptions_bp = Blueprint('exceptions', __name__)
 
@@ -95,9 +97,12 @@ def init_exceptions_db():
                 decided_by      TEXT NOT NULL,
                 decided_at      TEXT NOT NULL,
                 new_owner       TEXT,
-                new_owner_email TEXT
+                new_owner_email TEXT,
+                recommendation  TEXT
             )
         ''')
+        if 'recommendation' not in {r[1] for r in conn.execute('PRAGMA table_info(decisions)')}:
+            conn.execute('ALTER TABLE decisions ADD COLUMN recommendation TEXT')
         if conn.execute('SELECT COUNT(*) FROM rules').fetchone()[0] == 0:
             for name, template, outcome, params, priority in DEFAULT_RULES:
                 conn.execute(
@@ -191,11 +196,6 @@ def _evaluate(facts, rules):
     return {'outcome': 'needs_review', 'rule': None, 'reason': reason}
 
 
-def _cn(cert):
-    return ((cert.get('subject') or {}).get('common_name') or cert.get('common_name')
-            or (cert.get('seat') or {}).get('seat_id'))
-
-
 def _snapshot(rule):
     if not rule:
         return None
@@ -213,11 +213,18 @@ def _refresh():
     with _refresh_lock, _db() as conn:
         owner_map = {r['serial_number']: r['owner_name']
                      for r in conn.execute('SELECT serial_number, owner_name FROM owner_assignments').fetchall()}
+        bu_map = {r['serial_number']: r['bu_name']
+                  for r in conn.execute('SELECT serial_number, bu_name FROM bu_assignments').fetchall()}
         rules = _load_rules(conn)
         existing = {r['serial_number']: r for r in conn.execute('SELECT * FROM decisions').fetchall()}
         now = datetime.now(timezone.utc).isoformat()
+        active = list(_active_with_facts(certs, owner_map))
+        # DigiCert files app-issued certs under the profile's BU; the local overlay holds the intended one.
+        bu_of = {c['serial_number']: bu_map.get(c['serial_number']) or (c.get('business_unit') or {}).get('name') or ''
+                 for c, _ in active}
+        info = {c['serial_number']: (bu_of[c['serial_number']], f['owner']) for c, f in active}
         seen = set()
-        for cert, facts in _active_with_facts(certs, owner_map):
+        for cert, facts in active:
             serial = cert['serial_number']
             seen.add(serial)
             prev = existing.get(serial)
@@ -226,8 +233,10 @@ def _refresh():
             res = _evaluate(facts, rules)
             rule = res['rule']
             seat = cert.get('seat') or {}
-            row = (_cn(cert), seat.get('seat_id') or serial, facts['owner'],
-                   (cert.get('business_unit') or {}).get('name') or '',
+            rec = None
+            if res['outcome'] == 'needs_review':
+                rec = json.dumps(recommend(cert, bu_of[serial], peer_counter(serial, bu_of[serial], info), USERS))
+            row = (cert_name(cert), seat.get('seat_id') or serial, facts['owner'], bu_of[serial],
                    (cert.get('valid_to') or '')[:10], facts['days'],
                    res['outcome'], rule['id'] if rule else None, rule['name'] if rule else None,
                    _snapshot(rule), res['reason'])
@@ -235,9 +244,10 @@ def _refresh():
             decided_at = prev['decided_at'] if unchanged else now
             conn.execute(
                 'INSERT OR REPLACE INTO decisions (serial_number, common_name, seat_id, owner, bu_name, valid_to, '
-                'expires_in_days, outcome, rule_id, rule_name, rule_snapshot, reason, decided_by, decided_at) '
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'system', ?)",
-                (serial, *row, decided_at),
+                'expires_in_days, outcome, rule_id, rule_name, rule_snapshot, reason, decided_by, decided_at, '
+                'recommendation) '
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'system', ?, ?)",
+                (serial, *row, decided_at, rec),
             )
         for serial, prev in existing.items():
             if serial not in seen and prev['outcome'] in AUTO_OUTCOMES:
@@ -255,7 +265,10 @@ def _rows(outcome):
     for r in rows:
         d = dict(r)
         d['rule_snapshot'] = json.loads(d['rule_snapshot']) if d['rule_snapshot'] else None
+        d['recommendation'] = json.loads(d['recommendation']) if d.get('recommendation') else None
         out.append(d)
+    rank = {'High': 0, 'Medium': 1, 'Low': 2}
+    out.sort(key=lambda d: rank.get((d['recommendation'] or {}).get('confidence'), 3))  # stable: keeps expiry order
     return out
 
 
@@ -393,6 +406,6 @@ def preview_rule(rule_id):
         else:
             to_auto += 1
         if len(samples) < 10:
-            samples.append({'serial_number': serial, 'common_name': _cn(cert),
+            samples.append({'serial_number': serial, 'common_name': cert_name(cert),
                             'from': before['outcome'], 'to': after['outcome'], 'reason': after['reason']})
     return jsonify({'to_queue': to_queue, 'to_auto_approved': to_auto, 'samples': samples})

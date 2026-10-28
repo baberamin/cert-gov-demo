@@ -6,7 +6,7 @@ import {
   fetchExceptions, fetchAutoHandled, fetchRules, fetchUsers,
   decideException, updateRule, previewRule,
 } from '../api';
-import type { ExceptionItem, Rule, RulePreview, User } from '../api';
+import type { ExceptionItem, Recommendation, Rule, RulePreview, User } from '../api';
 
 type Tab = 'queue' | 'auto' | 'rules';
 
@@ -17,8 +17,11 @@ function ExceptionActions({ item, users, onDecide }: {
   users: User[];
   onDecide: (serial: string, decision: 'approved' | 'revoked' | 'reassigned', owner?: User) => void;
 }) {
+  const rec = item.recommendation;
+  const suggested = users.find(u => u.name === rec?.owner?.name);
+  const ordered = [...users].sort((a, b) => Number(b.department === rec?.team) - Number(a.department === rec?.team));
   const [reassigning, setReassigning] = useState(false);
-  const [userId, setUserId] = useState('');
+  const [userId, setUserId] = useState(suggested?.id ?? '');
   const picked = users.find(u => u.id === userId);
 
   if (reassigning) {
@@ -27,7 +30,7 @@ function ExceptionActions({ item, users, onDecide }: {
         <select value={userId} onChange={e => setUserId(e.target.value)}
           className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
           <option value="">Select user...</option>
-          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          {ordered.map(u => <option key={u.id} value={u.id}>{u.name} ({u.department})</option>)}
         </select>
         <button disabled={!picked}
           onClick={() => picked && onDecide(item.serial_number, 'reassigned', picked)}
@@ -45,6 +48,38 @@ function ExceptionActions({ item, users, onDecide }: {
         className="px-2.5 py-1 text-xs border border-red-300 text-red-700 rounded hover:bg-red-50">Revoke</button>
       <button onClick={() => setReassigning(true)}
         className="px-2.5 py-1 text-xs border border-amber-300 text-amber-700 rounded hover:bg-amber-50">Reassign</button>
+    </div>
+  );
+}
+
+const CONFIDENCE_COLOR = { High: 'green', Medium: 'amber', Low: 'gray', None: 'gray' } as const;
+
+function RecommendationCell({ rec, users, onAccept }: {
+  rec: Recommendation | null;
+  users: User[];
+  onAccept: (user: User) => void;
+}) {
+  if (!rec) return <span className="text-xs text-gray-400">—</span>;
+  const user = users.find(u => u.name === rec.owner?.name);
+  return (
+    <div className="text-xs">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Chip label={rec.confidence === 'None' ? 'No recommendation' : `${rec.confidence} confidence`} color={CONFIDENCE_COLOR[rec.confidence]} />
+        {rec.owner && <span className="font-medium text-gray-900 text-sm">{rec.owner.name}</span>}
+        {!rec.owner && rec.team && <span className="text-gray-700">Team: {rec.team}</span>}
+      </div>
+      {rec.owner && user && (
+        <button onClick={() => onAccept(user)}
+          className="mt-1.5 px-2 py-0.5 border border-indigo-300 text-indigo-700 rounded hover:bg-indigo-50">
+          Accept suggestion
+        </button>
+      )}
+      <details className="mt-1.5 text-gray-500">
+        <summary className="cursor-pointer hover:text-gray-700">Evidence</summary>
+        <ul className="mt-1 list-disc pl-4 space-y-0.5">
+          {rec.evidence.map((e, i) => <li key={i}>{e}</li>)}
+        </ul>
+      </details>
     </div>
   );
 }
@@ -229,17 +264,21 @@ export function ExceptionsPage() {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-200 bg-gray-50">
               <th className={TH}>Common Name</th><th className={TH}>BU</th><th className={TH}>Owner</th>
-              <th className={TH}>Expires</th><th className={TH}>Why it needs you</th><th className={TH}>Decision</th>
+              <th className={TH}>Expires</th><th className={TH}>Why it needs you</th><th className={TH}>Suggested owner</th><th className={TH}>Decision</th>
             </tr></thead>
             <tbody>
               {queue.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Nothing needs attention.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Nothing needs attention.</td></tr>
               ) : queue.map(i => (
                 <tr key={i.serial_number} className="border-b border-gray-100">
                   {certCells(i)}
                   <td className="px-4 py-3">
                     <Chip label={i.rule_name ?? 'No rule matched'} color={i.rule_name ? 'amber' : 'gray'} />
                     <p className="text-xs text-gray-500 mt-1">{i.reason}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <RecommendationCell rec={i.recommendation} users={users}
+                      onAccept={u => handleDecide(i.serial_number, 'reassigned', u)} />
                   </td>
                   <td className="px-4 py-3"><ExceptionActions item={i} users={users} onDecide={handleDecide} /></td>
                 </tr>
