@@ -33,7 +33,6 @@ def tmp_db(tmp_path, monkeypatch):
     import routes.owner_store
     monkeypatch.setattr(routes.exceptions, 'DB_PATH', db_path)
     monkeypatch.setattr(routes.owner_store, 'DB_PATH', db_path)
-    monkeypatch.setattr(routes.exceptions, '_CERT_TTL', 0)
     routes.owner_store.init_db()
     routes.exceptions.init_exceptions_db()
 
@@ -233,9 +232,9 @@ def test_preview_sample_uses_subject_common_name(client):
 
 @rsps.activate
 def test_certs_pulled_once_within_ttl(client, monkeypatch):
-    import routes.exceptions as ex
-    monkeypatch.setattr(ex, '_CERT_TTL', 60)
-    ex._cert_cache['at'] = float('-inf')
+    import routes.certificates as certs_mod
+    monkeypatch.setattr(certs_mod, '_INVENTORY_TTL', 60)
+    certs_mod.invalidate_inventory()
     mock_certs([HEALTHY])
     handled(client)
     queue(client)
@@ -312,4 +311,14 @@ def test_init_adds_recommendation_column_to_older_database(tmp_path, monkeypatch
                      'decided_by TEXT NOT NULL, decided_at TEXT NOT NULL)')
     ex.init_exceptions_db()
     with sqlite3.connect(db) as conn:
-        assert 'recommendation' in {r[1] for r in conn.execute('PRAGMA table_info(decisions)')}
+        assert {'recommendation', 'ca_vendor'} <= {r[1] for r in conn.execute('PRAGMA table_info(decisions)')}
+
+
+@rsps.activate
+def test_items_carry_ca_vendor_for_filtering(client):
+    mock_certs([tenant('T1', 'Finance & Accounting', ca_vendor='Saviynt'),
+                tenant('P1', 'Finance & Accounting', owner='Pepper Potts', ca_vendor='Saviynt'),
+                cert('SELF-1', seat={'seat_id': 's', 'seat_name': ''}, ca_vendor='Dummy Certs Lab')])
+    assert queue(client)['T1']['ca_vendor'] == 'Saviynt'
+    assert queue(client)['SELF-1']['ca_vendor'] == 'Dummy Certs Lab'
+    assert handled(client)['P1']['ca_vendor'] == 'Saviynt'

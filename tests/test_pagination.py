@@ -27,3 +27,9 @@ def test_stops_on_an_empty_page_even_if_has_more_stays_true():
     rsps.add(rsps.GET, SEARCH, json={'certificates': [], 'has_more': True})
     assert _fetch_all_certs({}) == []
     assert len(rsps.calls) == 1
+
+
+@rsps.activate
+def test_pages_come_back_in_order():
+    paged(765)
+    assert [c['serial_number'] for c in _fetch_all_certs({})] == [f'S{i}' for i in range(765)]

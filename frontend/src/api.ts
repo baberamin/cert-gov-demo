@@ -260,6 +260,7 @@ export interface ExceptionItem {
   decided_by: string;
   decided_at: string;
   recommendation: Recommendation | null;
+  ca_vendor: string;
 }
 
 export interface Rule {

@@ -1,3 +1,6 @@
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, jsonify, request
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -50,24 +53,66 @@ def _extract_certs(data):
     return data.get('certificates', data.get('items', data.get('results', [])))
 
 
-def _fetch_all_certs(params, max_pages=1000):
-    """Paginate certificate-search with limit/offset (max 100 per page) until DigiCert says there is no more.
+def _search_page(params, page, limit=100):
+    return dc.get('/mpki/api/v1/certificate-search', params={**params, 'limit': limit, 'offset': page * limit})
 
-    max_pages is only a runaway guard. A low cap silently hides certs: expired ones sort first and fill it.
+
+def _fetch_all_certs(params, max_pages=1000, workers=6):
+    """Fetch every page of certificate-search (limit/offset, max 100 per page) until DigiCert says there is no more.
+
+    Pages after the first are requested `workers` at a time, which is what keeps a ~900-cert tenant to a few
+    seconds. max_pages is only a runaway guard: a low cap silently hides certs, because expired ones sort first.
     """
-    all_certs = []
-    limit = 100
-    for page in range(max_pages):
-        data = dc.get('/mpki/api/v1/certificate-search',
-                      params={**params, 'limit': limit, 'offset': page * limit})
-        if isinstance(data, list):
-            all_certs.extend(data)
-            break
-        certs = _extract_certs(data)
-        all_certs.extend(certs)
-        if not certs or not data.get('has_more', False):
-            break
+    data = _search_page(params, 0)
+    if isinstance(data, list):
+        return data
+    certs = _extract_certs(data)
+    if not certs or not data.get('has_more', False):
+        return certs
+    all_certs = list(certs)
+    page = 1
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        while page < max_pages:
+            batch = range(page, min(page + workers, max_pages))
+            for data in pool.map(lambda p: _search_page(params, p), batch):
+                if isinstance(data, list):
+                    return all_certs + data
+                certs = _extract_certs(data)
+                all_certs.extend(certs)
+                if not certs or not data.get('has_more', False):
+                    return all_certs
+            page += workers
     return all_certs
+
+
+_INVENTORY_TTL = 30
+_inventory_cache = {'at': float('-inf'), 'writes': -1, 'certs': []}
+_inventory_lock = threading.Lock()
+
+
+def invalidate_inventory():
+    with _inventory_lock:
+        _inventory_cache['at'] = float('-inf')
+
+
+def fetch_inventory():
+    """Every cert (open search plus our profile's), shared by the governance pages.
+
+    Cached for a short time, and dropped as soon as the app writes anything to DigiCert.
+    """
+    with _inventory_lock:
+        c = _inventory_cache
+        if time.monotonic() - c['at'] >= _INVENTORY_TTL or c['writes'] != dc.writes:
+            writes = dc.writes
+            certs = _fetch_all_certs({})
+            try:
+                profile_certs = _fetch_all_certs({'profile_id': PROFILE_ID})
+                seen = {x.get('serial_number') for x in certs}
+                certs = certs + [x for x in profile_certs if x.get('serial_number') not in seen]
+            except Exception:
+                pass
+            c.update(at=time.monotonic(), writes=writes, certs=certs)
+        return list(c['certs'])
 
 
 @certificates_bp.route('/api/certificates')

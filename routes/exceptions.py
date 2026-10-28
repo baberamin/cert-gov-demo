@@ -2,11 +2,10 @@ import json
 import os
 import sqlite3
 import threading
-import time
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 import digicert_client as dc
-from routes.findings import _fetch_certs_all
+from routes.certificates import fetch_inventory
 from routes.ownership import update_seat_owner
 from routes.recommendations import recommend, peer_counter, cert_name
 from routes.users import USERS
@@ -47,19 +46,6 @@ DEFAULT_RULES = [
 
 _refresh_lock = threading.Lock()
 
-# The page loads the queue and auto-handled list together; this keeps them to one DigiCert pull.
-_CERT_TTL = 30
-_cert_cache = {'at': float('-inf'), 'certs': []}
-_cert_lock = threading.Lock()
-
-
-def _certs():
-    with _cert_lock:
-        if time.monotonic() - _cert_cache['at'] >= _CERT_TTL:
-            _cert_cache['certs'] = _fetch_certs_all()
-            _cert_cache['at'] = time.monotonic()
-        return _cert_cache['certs']
-
 
 def _db():
     conn = sqlite3.connect(DB_PATH)
@@ -98,11 +84,14 @@ def init_exceptions_db():
                 decided_at      TEXT NOT NULL,
                 new_owner       TEXT,
                 new_owner_email TEXT,
-                recommendation  TEXT
+                recommendation  TEXT,
+                ca_vendor       TEXT
             )
         ''')
-        if 'recommendation' not in {r[1] for r in conn.execute('PRAGMA table_info(decisions)')}:
-            conn.execute('ALTER TABLE decisions ADD COLUMN recommendation TEXT')
+        have = {r[1] for r in conn.execute('PRAGMA table_info(decisions)')}
+        for column in ('recommendation', 'ca_vendor'):
+            if column not in have:
+                conn.execute(f'ALTER TABLE decisions ADD COLUMN {column} TEXT')
         if conn.execute('SELECT COUNT(*) FROM rules').fetchone()[0] == 0:
             for name, template, outcome, params, priority in DEFAULT_RULES:
                 conn.execute(
@@ -209,7 +198,7 @@ def _active_with_facts(certs, owner_map):
 
 
 def _refresh():
-    certs = _certs()
+    certs = fetch_inventory()
     with _refresh_lock, _db() as conn:
         owner_map = {r['serial_number']: r['owner_name']
                      for r in conn.execute('SELECT serial_number, owner_name FROM owner_assignments').fetchall()}
@@ -239,14 +228,14 @@ def _refresh():
             row = (cert_name(cert), seat.get('seat_id') or serial, facts['owner'], bu_of[serial],
                    (cert.get('valid_to') or '')[:10], facts['days'],
                    res['outcome'], rule['id'] if rule else None, rule['name'] if rule else None,
-                   _snapshot(rule), res['reason'])
+                   _snapshot(rule), res['reason'], cert.get('ca_vendor') or '')
             unchanged = prev and (prev['outcome'], prev['rule_id'], prev['reason']) == (row[6], row[7], row[10])
             decided_at = prev['decided_at'] if unchanged else now
             conn.execute(
                 'INSERT OR REPLACE INTO decisions (serial_number, common_name, seat_id, owner, bu_name, valid_to, '
-                'expires_in_days, outcome, rule_id, rule_name, rule_snapshot, reason, decided_by, decided_at, '
-                'recommendation) '
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'system', ?, ?)",
+                'expires_in_days, outcome, rule_id, rule_name, rule_snapshot, reason, ca_vendor, decided_by, '
+                'decided_at, recommendation) '
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'system', ?, ?)",
                 (serial, *row, decided_at, rec),
             )
         for serial, prev in existing.items():
@@ -394,7 +383,7 @@ def preview_rule(rule_id):
     proposed = [updated if r['id'] == rule_id else r for r in current]
 
     to_queue, to_auto, samples = 0, 0, []
-    for cert, facts in _active_with_facts(_certs(), owner_map):
+    for cert, facts in _active_with_facts(fetch_inventory(), owner_map):
         serial = cert['serial_number']
         if serial in human:
             continue

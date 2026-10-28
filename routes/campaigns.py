@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 import digicert_client as dc
-from routes.certificates import _fetch_all_certs, PROFILE_ID
+from routes.certificates import fetch_inventory
 from routes.ownership import update_seat_owner
 
 campaigns_bp = Blueprint('campaigns', __name__)
@@ -50,17 +50,6 @@ def _db():
     return conn
 
 
-def _fetch_certs_all():
-    certs = _fetch_all_certs({})
-    try:
-        profile_certs = _fetch_all_certs({'profile_id': PROFILE_ID})
-        seen = {c.get('serial_number') for c in certs}
-        certs += [c for c in profile_certs if c.get('serial_number') not in seen]
-    except Exception:
-        pass
-    return certs
-
-
 def _campaign_summary(campaign_id, conn):
     rows = conn.execute('SELECT decision FROM campaign_items WHERE campaign_id=?', (campaign_id,)).fetchall()
     decisions = [r['decision'] for r in rows]
@@ -83,7 +72,7 @@ def create_campaign():
     scope_bu_id = body.get('scope_bu_id') or None
     deadline = body.get('deadline') or None
 
-    certs = _fetch_certs_all()
+    certs = fetch_inventory()
     active = [c for c in certs if c.get('status') in ('issued', 'active')]
 
     with _db() as conn:

@@ -190,6 +190,7 @@ export function ExceptionsPage() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [editing, setEditing] = useState<Rule | null>(null);
+  const [caFilter, setCaFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -228,9 +229,14 @@ export function ExceptionsPage() {
 
   if (loading) return <div className="text-center py-16 text-gray-400">Evaluating certificates...</div>;
 
+  const cas = Array.from(new Set([...queue, ...auto].map(i => i.ca_vendor || 'Unknown'))).sort();
+  const byCa = (i: ExceptionItem) => !caFilter || (i.ca_vendor || 'Unknown') === caFilter;
+  const shownQueue = queue.filter(byCa);
+  const shownAuto = auto.filter(byCa);
+
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'queue', label: `Needs Attention (${queue.length})` },
-    { key: 'auto', label: `Auto-handled (${auto.length})` },
+    { key: 'queue', label: `Needs Attention (${shownQueue.length})` },
+    { key: 'auto', label: `Auto-handled (${shownAuto.length})` },
     { key: 'rules', label: 'Rules' },
   ];
 
@@ -247,7 +253,8 @@ export function ExceptionsPage() {
     <div>
       <PageHeader title="Exceptions" subtitle="Certificates are approved automatically by rule. Only exceptions need a person." />
 
-      <div className="flex gap-1 mb-4 border-b border-gray-200">
+      <div className="flex items-end justify-between mb-4 border-b border-gray-200">
+        <div className="flex gap-1">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
@@ -255,6 +262,14 @@ export function ExceptionsPage() {
             {t.label}
           </button>
         ))}
+        </div>
+        {tab !== 'rules' && (
+          <select value={caFilter} onChange={e => setCaFilter(e.target.value)} aria-label="Filter by CA"
+            className="mb-1.5 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">All CAs</option>
+            {cas.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
       </div>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
@@ -267,9 +282,9 @@ export function ExceptionsPage() {
               <th className={TH}>Expires</th><th className={TH}>Why it needs you</th><th className={TH}>Suggested owner</th><th className={TH}>Decision</th>
             </tr></thead>
             <tbody>
-              {queue.length === 0 ? (
+              {shownQueue.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Nothing needs attention.</td></tr>
-              ) : queue.map(i => (
+              ) : shownQueue.map(i => (
                 <tr key={i.serial_number} className="border-b border-gray-100">
                   {certCells(i)}
                   <td className="px-4 py-3">
@@ -296,9 +311,9 @@ export function ExceptionsPage() {
               <th className={TH}>Expires</th><th className={TH}>Approved by rule</th><th className={TH}>Why</th>
             </tr></thead>
             <tbody>
-              {auto.length === 0 ? (
+              {shownAuto.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Nothing was auto-handled.</td></tr>
-              ) : auto.map(i => (
+              ) : shownAuto.map(i => (
                 <tr key={i.serial_number} className="border-b border-gray-100">
                   {certCells(i)}
                   <td className="px-4 py-3">

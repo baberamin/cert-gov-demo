@@ -16,3 +16,9 @@ def app(set_env):
 @pytest.fixture
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def no_inventory_cache(monkeypatch):
+    import routes.certificates
+    monkeypatch.setattr(routes.certificates, '_INVENTORY_TTL', 0)

@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 import digicert_client as dc
-from routes.certificates import _fetch_all_certs, PROFILE_ID
+from routes.certificates import fetch_inventory
 
 findings_bp = Blueprint('findings', __name__)
 
@@ -135,20 +135,9 @@ def _compute_findings(certs, owner_map):
     return findings
 
 
-def _fetch_certs_all():
-    certs = _fetch_all_certs({})
-    try:
-        profile_certs = _fetch_all_certs({'profile_id': PROFILE_ID})
-        seen = {c.get('serial_number') for c in certs}
-        certs += [c for c in profile_certs if c.get('serial_number') not in seen]
-    except Exception:
-        pass
-    return certs
-
-
 @findings_bp.route('/api/findings')
 def list_findings():
-    certs = _fetch_certs_all()
+    certs = fetch_inventory()
 
     with _db() as conn:
         owner_map = {r['serial_number']: r['owner_name']
@@ -185,7 +174,7 @@ def list_findings():
 
 @findings_bp.route('/api/overview')
 def get_overview():
-    certs = _fetch_certs_all()
+    certs = fetch_inventory()
 
     with _db() as conn:
         owner_map = {r['serial_number']: r['owner_name']
