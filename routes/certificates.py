@@ -50,8 +50,11 @@ def _extract_certs(data):
     return data.get('certificates', data.get('items', data.get('results', [])))
 
 
-def _fetch_all_certs(params, max_pages=5):
-    """Paginate certificate-search using limit/offset (max 100 per page per spec)."""
+def _fetch_all_certs(params, max_pages=1000):
+    """Paginate certificate-search with limit/offset (max 100 per page) until DigiCert says there is no more.
+
+    max_pages is only a runaway guard. A low cap silently hides certs: expired ones sort first and fill it.
+    """
     all_certs = []
     limit = 100
     for page in range(max_pages):
@@ -62,7 +65,7 @@ def _fetch_all_certs(params, max_pages=5):
             break
         certs = _extract_certs(data)
         all_certs.extend(certs)
-        if not data.get('has_more', False):
+        if not certs or not data.get('has_more', False):
             break
     return all_certs
 
