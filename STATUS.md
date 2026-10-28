@@ -62,7 +62,7 @@ The profile's third-party auth is tied to the user who set it up, so certs issue
 - **Seat read/update require a business unit** (`business_unit_id`) and seats are unique per BU, so two seats can share an identifier. An update without it returns HTTP 400.
 - **BU is NOT set at enrollment** — `business_unit` in `CertificateRequest` is silently ignored. BU comes from the **seat's BU membership**, but DigiCert still files the cert under the *profile's* BU (see Architectural Decisions).
 - **`attributes` dotted-path** — We send `{"subject.common_name": value}`. Spec says nested `{subject: {common_name: value}}` but DigiCert accepts both. Left as-is.
-- **Reissue endpoint** is `POST /mpki/api/v1/certificate/{serial}/renew` (not re-posting to `/certificate`).
+- **Reissue** is a fresh enrollment (`POST /mpki/api/v1/certificate`) followed by a revoke of the old cert. `/certificate/{serial}/renew` is not used: it is blocked until 30 days before expiry.
 - **Revoke** is `PUT /mpki/api/v1/certificate/{serial}/revoke` with `{revocation_reason: "..."}`.
 - **Cancel** — no cancel endpoint exists for this profile. `DELETE /revoke` means *resume suspended*, not cancel. Backend returns 501.
 - **POST /business-unit requires `account.id`** — fetched from the Engineering BU at sync time.
@@ -148,7 +148,7 @@ Shown in the Exceptions queue and in both Inventory owner panels (same code, `GE
 - **Issue Certificate** panel: Common Name, Seat ID (defaults to CN), SAN, BU, Owner; creates/moves the DigiCert seat into the selected BU before enrolling; private key shown once, not persisted.
 - **Sync BUs** button: idempotent creation of the 8 demo BUs, UUIDs saved to `bu_ids.json`.
 - **Assign Owner**: saved locally only; shows the recommendation with its evidence.
-- **Remediation**: Revoke; Revoke & Reissue (`/renew`, then revoke the old cert); Cancel returns 501.
+- **Remediation**: Revoke (reason is normalized to DigiCert's upper-case enum; unknown or missing means `UNSPECIFIED`); Revoke & Reissue (issue a fresh cert with the old cert's common name and seat, then revoke the old one; if the revoke fails the response is 207 with the new serial); Cancel returns 501.
 
 ### Campaigns (parked)
 The earlier access-review campaign workflow still works at `/campaigns` but is no longer in the sidebar. See `README.md` for how to bring it back or remove it.
@@ -176,7 +176,7 @@ DigiCert files every cert under the **profile's** business unit regardless of th
 
 ## Known Limitations / To-Do
 
-- **7 older tests fail** (in `test_certificates.py`, `test_ownership.py`, `test_remediation.py`). They predate later changes and assert old response shapes or routes (for example a list vs `{items: [...]}`, `/api/certificates` vs `/issue`, lowercase revocation reasons, a "Default Business Unit" fixture, the reissue flow, and the 501 cancel). All newer tests pass. Worth fixing before treating `make test` as a clean gate.
+- **Reissue does not carry over SANs.** The replacement cert gets the old cert's common name and seat only.
 - **Demo certs expire** (199-day profile, issued 2026-10-28); `make demo-reset` re-issues missing ones.
 - **Shared tenant**: demo certs and the self-signed lab certs are real objects in the demo tenant. Do not use Revoke during a demo.
 - **Cache staleness**: certs issued outside this app (another process, the DigiCert console) can take up to 30 s to appear in Overview, Findings, and Exceptions.

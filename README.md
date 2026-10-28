@@ -73,8 +73,6 @@ To bring it back, add `{ label: 'Campaigns', to: '/campaigns' }` to `navItems` i
 make test
 ```
 
-Seven older tests in `test_certificates.py`, `test_ownership.py`, and `test_remediation.py` currently fail. They predate later changes and assert old response shapes; all newer tests pass. Details are in STATUS.md.
-
 ## Tech stack
 
 - **Backend:** Flask, SQLite, DigiCert MPKI REST API

@@ -28,7 +28,7 @@ VALID_REVOCATION_REASONS = {
 
 @remediation_bp.route('/api/certificates/<serial>/revoke', methods=['POST'])
 def revoke_certificate(serial):
-    body = request.get_json() or {}
+    body = request.get_json(silent=True) or {}
     reason = (body.get('reason') or 'UNSPECIFIED').strip().upper()
     if reason not in VALID_REVOCATION_REASONS:
         reason = 'UNSPECIFIED'
@@ -56,7 +56,7 @@ def reissue_certificate(serial):
         'attributes': {'subject.common_name': common_name},
     })
 
-    body = request.get_json() or {}
+    body = request.get_json(silent=True) or {}
     reason = (body.get('reason') or 'SUPERSEDED').strip().upper()
     if reason not in VALID_REVOCATION_REASONS:
         reason = 'SUPERSEDED'

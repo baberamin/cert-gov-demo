@@ -16,13 +16,16 @@ MOCK_SEAT = {
 
 
 @rsps.activate
-def test_list_business_units(client):
-    rsps.add(rsps.GET, f'{DIGICERT_BASE}/mpki/api/v1/business-unit', json=[MOCK_BU], status=200)
+def test_list_business_units_returns_the_demo_list_without_calling_digicert(client):
     resp = client.get('/api/business-units')
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data[0]['name'] == 'Default Business Unit'
-    assert rsps.calls[0].request.headers['x-api-key'] == 'test-api-key'
+    assert [b['name'] for b in data] == [
+        'Engineering', 'DevOps & Infrastructure', 'Finance & Accounting', 'Marketing & Growth',
+        'Legal & Compliance', 'Information Security', 'Product Management', 'Human Resources',
+    ]
+    assert all(b['id'] for b in data)
+    assert len(rsps.calls) == 0
 
 
 @rsps.activate
