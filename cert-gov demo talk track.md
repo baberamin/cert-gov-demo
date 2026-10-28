@@ -1,6 +1,6 @@
 # Demo Talk Track: Certificate Governance by Exception (about 4 min)
 
-**Before you start:** the app must be running and the Exceptions page loaded once (the first load takes about 5 seconds while it pulls from DigiCert). Read counts off the screen rather than quoting numbers from this script, because they follow the live tenant. If macOS AirPlay is holding port 5000, run on another port: `.venv/bin/python -m flask --app app run --host 127.0.0.1 --port 5001`.
+**Before you start:** the app must be running and the Exceptions page loaded once (the first load takes about 5 seconds while it pulls from DigiCert). Read counts off the screen rather than quoting numbers from this script, because they follow the live tenant. The app runs on port 5001 because macOS AirPlay Receiver holds port 5000.
 
 ---
 

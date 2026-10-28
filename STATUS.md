@@ -8,7 +8,7 @@
 
 A proof-of-concept integrating Saviynt's **Zuma** NHI governance platform with **DigiCert Trust Lifecycle Manager (MPKI)**. It demonstrates the NHI certificate lifecycle stories: inventory visibility, ownership assignment, issuance, and remediation (revoke / reissue / cancel).
 
-The app is a **Flask API** (port 5000) serving a **React + Vite + Tailwind** SPA from `/static`. The React frontend is built with `npm run build` from `frontend/` — output lands in `static/`.
+The app is a **Flask API** (port 5001) serving a **React + Vite + Tailwind** SPA from `/static`. The React frontend is built with `npm run build` from `frontend/` — output lands in `static/`.
 
 ---
 
@@ -18,11 +18,11 @@ The app is a **Flask API** (port 5000) serving a **React + Vite + Tailwind** SPA
 # Terminal 1 — Flask API
 cd /Users/baber.amin/projects/digicert-poc
 source .venv/bin/activate
-python app.py                  # runs at http://127.0.0.1:5000
+python app.py                  # runs at http://127.0.0.1:5001
 
 # Terminal 2 — Frontend dev (hot reload)
 cd frontend
-npm run dev                    # proxies /api/* to Flask at :5000
+npm run dev                    # proxies /api/* to Flask at :5001
 
 # OR: build once and serve through Flask
 cd frontend && npm run build   # outputs to ../static/
@@ -111,7 +111,7 @@ digicert-poc/
     │       ├── SidePanel.tsx
     │       ├── Chip.tsx
     │       └── PageHeader.tsx
-    └── vite.config.ts       # Proxy: /api/* → http://127.0.0.1:5000
+    └── vite.config.ts       # Proxy: /api/* → http://127.0.0.1:5001
 ```
 
 ---
