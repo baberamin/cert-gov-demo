@@ -46,7 +46,7 @@ Switch the filter back to **Saviynt** for the next step.
 
 Click **Accept suggestion** on one row, or **Approve** on another (**do not use Revoke on a shared tenant**).
 
-> "One click, and the owner is written back to DigiCert. The cert leaves the queue."
+> "One click, and the owner is recorded in Zuma. We don't write it into DigiCert. Ownership is the layer we add on top of the CA, and it's why people work from this view instead of the CA's console. The cert leaves the queue."
 
 ## 2:15 Exceptions: Auto-handled
 
@@ -76,7 +76,7 @@ Click **Save rule**, show the counts move, then set it back to 30 and save. Or c
 
 ## Notes for the presenter
 
-- **Demo data.** The recommendation examples come from certs issued by `scripts/seed_demo_certs.py`. If you accept suggestions during a run, re-run that script to restore a fresh set (it skips names that already exist, so revoke the old ones first or change the names). The self-signed lab certs are real tenant data (CA "Dummy Certs Lab"), so the "no recommendation" contrast is live.
+- **Demo data.** Run `make demo-reset` before each demo (`make demo-reset ARGS=--dry-run` previews it). It restores the demo certs' owners, clears decisions, and puts the rules back to defaults, so the queue starts the same every time. Accepting suggestions only changes our own records, so a reset undoes it completely. The self-signed lab certs are real tenant data (CA "Dummy Certs Lab"), so the "no recommendation" contrast is live.
 - **Auto-approve only.** The system never revokes or reassigns on its own. Only people do.
 - **Campaigns are parked, not deleted.** If asked about periodic reviews: the earlier campaign workflow is still in the code at `/campaigns` and can go back in the menu if a customer wants scheduled reviews. See the README.
 - **If the Needs Attention list is long,** that reflects the tenant's real ownership gap. Say so: "most of these are unowned, which is exactly the problem this surfaces."

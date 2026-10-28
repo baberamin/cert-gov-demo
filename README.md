@@ -37,6 +37,15 @@ make run
 
 Then open **http://127.0.0.1:5001** in your browser.
 
+## Resetting the demo
+
+```bash
+make demo-reset ARGS=--dry-run   # show what would change
+make demo-reset                  # reset
+```
+
+This makes sure the demo certificates exist (issuing any that are missing from the tenant CA), clears Exceptions decisions and finding statuses, restores the default rules, and resets the owners of the demo certificates. It never writes ownership to DigiCert, never revokes anything, and leaves other certificates' owners alone. Run it before each demo.
+
 ## Parked: access review campaigns
 
 The Exceptions page replaced Campaigns in the sidebar. The campaigns feature still exists and works; it is only unlinked.

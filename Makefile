@@ -1,4 +1,4 @@
-.PHONY: setup run test
+.PHONY: setup run test demo-reset
 
 setup:
 	python3 -m venv .venv
@@ -11,3 +11,6 @@ run:
 
 test:
 	.venv/bin/pytest tests/ -v
+
+demo-reset:
+	.venv/bin/python scripts/reset_demo.py $(ARGS)
